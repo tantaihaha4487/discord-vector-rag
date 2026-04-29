@@ -5,6 +5,7 @@ const BUILT_IN_PROVIDERS = {
     name: "OpenRouter",
     baseURL: "https://openrouter.ai/api/v1",
     model: "google/gemma-4-31b-it:free",
+    embeddingModel: "openai/text-embedding-3-small",
     temperature: 0.2,
     defaultHeaders: {
       "HTTP-Referer": "http://localhost:3000",
@@ -24,6 +25,7 @@ const BUILT_IN_PROVIDERS = {
   openai: {
     name: "OpenAI",
     model: "gpt-4o-mini",
+    embeddingModel: "text-embedding-3-small",
     temperature: 0.2,
   },
   groq: {
@@ -55,7 +57,7 @@ const BUILT_IN_PROVIDERS = {
 const CHUNK_SIZE = 1200;
 const CHUNK_OVERLAP = 180;
 const RETRIEVAL_LIMIT = 8;
-const DEFAULT_EMBEDDING_PROVIDER_ID = "openai";
+const DEFAULT_EMBEDDING_PROVIDER_ID = "openrouter";
 const DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small";
 const DEFAULT_QDRANT_URL = "http://localhost:6333";
 const DEFAULT_QDRANT_COLLECTION = "discord_vector_rag";
@@ -123,7 +125,9 @@ function getEmbeddingProviderConfig() {
   return {
     ...provider,
     embeddingModel:
-      getProviderEnv(id, "EMBEDDING_MODEL") ?? DEFAULT_EMBEDDING_MODEL,
+      getProviderEnv(id, "EMBEDDING_MODEL") ??
+      provider.embeddingModel ??
+      DEFAULT_EMBEDDING_MODEL,
   };
 }
 
