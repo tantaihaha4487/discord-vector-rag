@@ -1,0 +1,36 @@
+const { assertConfig, getConfiguredProviders } = require("./config");
+const { createChatModel } = require("./llm");
+const { answerQuestion } = require("./rag");
+const { getKnowledgeVectorStore } = require("./vector-store");
+
+async function askKnowledgeBase(question) {
+  assertConfig();
+
+  const vectorStore = await getKnowledgeVectorStore();
+
+  return answerWithFallback(vectorStore, question);
+}
+
+async function answerWithFallback(vectorStore, question) {
+  const providers = getConfiguredProviders();
+  let lastError;
+
+  for (const provider of providers) {
+    try {
+      return await answerQuestion(
+        createChatModel(provider),
+        vectorStore,
+        question,
+        provider,
+      );
+    } catch (error) {
+      lastError = error;
+
+      console.warn(`${provider.name} request failed:`, error);
+    }
+  }
+
+  throw lastError ?? new Error("No configured AI providers are available.");
+}
+
+module.exports = { askKnowledgeBase };
