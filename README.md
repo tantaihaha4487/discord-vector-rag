@@ -1,13 +1,14 @@
 # Discord Vector RAG Bot
 
-Discord.js v14 bot with a `/ask` slash command backed by local knowledge files, Qdrant vector search, and configurable OpenAI-compatible chat providers.
+Discord.js v14 bot with a `/ask` slash command backed by local knowledge files, keyword routing, Ollama local embeddings, Qdrant vector search, and configurable OpenAI-compatible chat providers.
 
 ## Tech Stack
 
 - Node.js
 - Discord.js v14
-- LangChain text splitters and OpenAI-compatible chat/embedding clients
-- OpenRouter embeddings by default
+- LangChain text splitters and OpenAI-compatible chat clients
+- Ollama local embeddings by default
+- OpenRouter embeddings as a fallback option
 - Qdrant vector database
 - Docker and Docker Compose
 - `pdf-parse` for PDF knowledge files
@@ -17,8 +18,10 @@ Discord.js v14 bot with a `/ask` slash command backed by local knowledge files, 
 - Slash command loader from the original Discord.js template
 - `/ask` command for questions against local knowledge files
 - Supports `.txt` and `.pdf` files in `data/`
-- Qdrant vector database retrieval
-- Provider-style embedding configuration using `AI_PROVIDER_<NAME>_*`
+- Keyword-first retrieval for exact/factual questions
+- Qdrant semantic retrieval for general questions
+- Local Ollama embedding configuration
+- Provider-style fallback embedding configuration using `AI_PROVIDER_<NAME>_*`
 - Configurable fallback order for OpenAI-compatible chat providers
 - Docker Compose setup for the bot and Qdrant
 
@@ -57,22 +60,40 @@ AI_PROVIDER_NVIDIA_MODEL=deepseek-ai/deepseek-v4-flash
 AI_PROVIDER_NVIDIA_BASE_URL=https://integrate.api.nvidia.com/v1
 ```
 
-5. Configure Qdrant and embeddings in `.env`:
+5. Install Ollama and pull the default embedding model:
+
+```bash
+ollama pull nomic-embed-text
+```
+
+6. Configure Qdrant and embeddings in `.env`:
 
 ```env
 QDRANT_URL=http://localhost:6333
 QDRANT_COLLECTION=discord_vector_rag
 QDRANT_INDEX_ID=discord-vector-rag
 
-EMBEDDING_PROVIDER=openrouter
+EMBEDDING_PROVIDER=ollama
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_EMBEDDING_MODEL=nomic-embed-text
+RAG_DEBUG_RETRIEVAL=false
 
+# Optional OpenRouter embedding fallback:
+# EMBEDDING_PROVIDER=openrouter
+# AI_PROVIDER_OPENROUTER_EMBEDDING_MODEL=openai/text-embedding-3-small
+```
+
+For OpenRouter embeddings instead of Ollama, set:
+
+```env
+EMBEDDING_PROVIDER=openrouter
 AI_PROVIDER_OPENROUTER_API_KEY=your_openrouter_api_key_here
 AI_PROVIDER_OPENROUTER_EMBEDDING_MODEL=openai/text-embedding-3-small
 ```
 
-`EMBEDDING_PROVIDER` uses the same provider env format as the chat config. For example, `EMBEDDING_PROVIDER=openrouter` reads `AI_PROVIDER_OPENROUTER_API_KEY`, `AI_PROVIDER_OPENROUTER_BASE_URL`, and `AI_PROVIDER_OPENROUTER_EMBEDDING_MODEL`.
+`EMBEDDING_PROVIDER=ollama` does not require an API key. Other embedding providers use the same provider env format as the chat config. For example, `EMBEDDING_PROVIDER=openrouter` reads `AI_PROVIDER_OPENROUTER_API_KEY`, `AI_PROVIDER_OPENROUTER_BASE_URL`, and `AI_PROVIDER_OPENROUTER_EMBEDDING_MODEL`.
 
-6. Add knowledge files:
+7. Add knowledge files:
 
 Place `.txt` or `.pdf` files in `data/`.
 
@@ -102,8 +123,17 @@ Reindex behavior:
 
 - The bot indexes `data/` on the first `/ask` after startup.
 - Before indexing, it deletes old Qdrant points for the current `QDRANT_INDEX_ID`.
+- If the embedding vector size changes, the bot recreates the Qdrant collection before indexing.
+- Changing between OpenRouter and Ollama embeddings requires reindexing because their vector dimensions and embedding spaces differ.
 - If you add, edit, or remove files while the bot is running, restart the bot so it rebuilds the Qdrant index.
 - You do not need to redeploy slash commands after changing `data/`.
+
+Retrieval behavior:
+
+- Exact/factual questions with strong keyword matches can use keyword-only retrieval and skip Qdrant embedding.
+- Medium-confidence keyword matches use keyword results first, then a small Qdrant fill.
+- General semantic questions use Qdrant first with local Ollama embeddings, then keyword fill.
+- Set `RAG_DEBUG_RETRIEVAL=true` to log retrieval mode, scores, source filenames, and chunk indexes without logging full chunk text.
 
 Docker data behavior:
 
@@ -111,7 +141,7 @@ Docker data behavior:
 - If you use `docker compose up -d --build`, local files in `data/` are available to the container.
 - If you run only the prebuilt Docker image without the Compose volume, rebuild the image after changing `data/`.
 
-7. Deploy Discord slash commands:
+8. Deploy Discord slash commands:
 
 ```bash
 npm run deploy
@@ -136,6 +166,25 @@ docker compose up -d --build
 ```
 
 Inside Compose, the bot uses `QDRANT_URL=http://qdrant:6333`. Your local `.env` can keep `QDRANT_URL=http://localhost:6333` for non-container runs.
+
+If the bot runs in Docker and Ollama runs on the host machine, use:
+
+```env
+OLLAMA_BASE_URL=http://host.docker.internal:11434
+```
+
+The Compose file includes this Linux host mapping for the bot service:
+
+```yaml
+extra_hosts:
+  - "host.docker.internal:host-gateway"
+```
+
+If the bot runs locally outside Docker, use:
+
+```env
+OLLAMA_BASE_URL=http://localhost:11434
+```
 
 3. Watch bot logs:
 
@@ -206,6 +255,14 @@ Run this command in Discord:
 
 ```text
 /ask question: What is this program about?
+```
+
+Examples:
+
+```text
+/ask question: 2569 admission requirement คืออะไร
+/ask question: ค่าเทอม 2568 เท่าไหร่
+/ask question: Data Science and Software Innovation เรียนเกี่ยวกับอะไร
 ```
 
 On the first `/ask`, the bot loads files from `data/`, chunks them, clears its own `QDRANT_INDEX_ID` points from Qdrant, and indexes the current chunks before searching.

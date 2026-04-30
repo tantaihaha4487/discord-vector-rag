@@ -39,8 +39,18 @@ async function buildKnowledgeVectorStore() {
   );
 
   return {
+    chunks,
     similaritySearch: (query, limit) =>
       similaritySearch(
+        client,
+        embeddings,
+        qdrant.collectionName,
+        qdrant.indexId,
+        query,
+        limit,
+      ),
+    similaritySearchWithScores: (query, limit) =>
+      similaritySearchWithScores(
         client,
         embeddings,
         qdrant.collectionName,
@@ -57,7 +67,17 @@ async function ensureCollection(client, collectionName, vectorSize) {
     (collection) => collection.name === collectionName,
   );
 
-  if (exists) return;
+  if (exists) {
+    const info = await client.getCollection(collectionName);
+    const existingSize = getCollectionVectorSize(info);
+
+    if (existingSize === vectorSize) return;
+
+    console.warn(
+      `Recreating Qdrant collection ${collectionName}: vector size changed from ${existingSize ?? "unknown"} to ${vectorSize}.`,
+    );
+    await client.deleteCollection(collectionName);
+  }
 
   await client.createCollection(collectionName, {
     vectors: {
@@ -65,6 +85,23 @@ async function ensureCollection(client, collectionName, vectorSize) {
       distance: "Cosine",
     },
   });
+}
+
+function getCollectionVectorSize(info) {
+  const collectionInfo = info.result ?? info;
+  const vectors = collectionInfo.config?.params?.vectors;
+
+  if (typeof vectors?.size === "number") return vectors.size;
+
+  if (vectors && typeof vectors === "object") {
+    const firstVector = Object.values(vectors).find(
+      (vector) => typeof vector?.size === "number",
+    );
+
+    return firstVector?.size;
+  }
+
+  return undefined;
 }
 
 async function deleteExistingIndex(client, collectionName, indexId) {
@@ -107,6 +144,26 @@ async function similaritySearch(
   query,
   limit,
 ) {
+  const results = await similaritySearchWithScores(
+    client,
+    embeddings,
+    collectionName,
+    indexId,
+    query,
+    limit,
+  );
+
+  return results.map((result) => result.doc);
+}
+
+async function similaritySearchWithScores(
+  client,
+  embeddings,
+  collectionName,
+  indexId,
+  query,
+  limit,
+) {
   const response = await client.query(collectionName, {
     query: await embeddings.embedQuery(query),
     limit,
@@ -122,13 +179,17 @@ async function similaritySearch(
     with_vector: false,
   });
 
-  return response.points.map((point) =>
-    new Document({
+  const points = response.points ?? response;
+
+  return points.map((point) => ({
+    doc: new Document({
       id: String(point.id),
       pageContent: point.payload?.content ?? "",
       metadata: point.payload?.metadata ?? {},
     }),
-  );
+    score: point.score,
+    source: "qdrant",
+  }));
 }
 
 function addIndexMetadata(chunks, indexId) {

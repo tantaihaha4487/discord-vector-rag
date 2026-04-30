@@ -1,6 +1,14 @@
 const DEFAULT_PROVIDER_IDS = ["openrouter", "nvidia"];
+const DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434";
+const DEFAULT_OLLAMA_EMBEDDING_MODEL = "nomic-embed-text";
 
 const BUILT_IN_PROVIDERS = {
+  ollama: {
+    name: "Ollama",
+    baseURL: process.env.OLLAMA_BASE_URL ?? DEFAULT_OLLAMA_BASE_URL,
+    embeddingModel:
+      process.env.OLLAMA_EMBEDDING_MODEL ?? DEFAULT_OLLAMA_EMBEDDING_MODEL,
+  },
   openrouter: {
     name: "OpenRouter",
     baseURL: "https://openrouter.ai/api/v1",
@@ -57,8 +65,8 @@ const BUILT_IN_PROVIDERS = {
 const CHUNK_SIZE = 1200;
 const CHUNK_OVERLAP = 180;
 const RETRIEVAL_LIMIT = 8;
-const DEFAULT_EMBEDDING_PROVIDER_ID = "openrouter";
-const DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small";
+const DEFAULT_EMBEDDING_PROVIDER_ID = "ollama";
+const DEFAULT_EMBEDDING_MODEL = DEFAULT_OLLAMA_EMBEDDING_MODEL;
 const DEFAULT_QDRANT_URL = "http://localhost:6333";
 const DEFAULT_QDRANT_COLLECTION = "discord_vector_rag";
 const DEFAULT_QDRANT_INDEX_ID = "discord-vector-rag";
@@ -73,7 +81,7 @@ function assertConfig() {
     );
   }
 
-  if (!embeddingProvider.apiKey) {
+  if (embeddingProvider.id !== "ollama" && !embeddingProvider.apiKey) {
     throw new Error(
       "Missing embedding provider configuration in .env. Set EMBEDDING_PROVIDER and AI_PROVIDER_<NAME>_API_KEY.",
     );
@@ -101,6 +109,8 @@ function getProviderConfig(id) {
     name: getProviderEnv(id, "NAME") ?? builtIn.name ?? formatProviderName(id),
     apiKey: getProviderEnv(id, "API_KEY"),
     model: getProviderEnv(id, "MODEL") ?? builtIn.model,
+    embeddingModel:
+      getProviderEnv(id, "EMBEDDING_MODEL") ?? builtIn.embeddingModel,
     baseURL: getProviderEnv(id, "BASE_URL") ?? builtIn.baseURL,
     temperature: getNumberProviderEnv(id, "TEMPERATURE", builtIn.temperature),
     topP: getNumberProviderEnv(id, "TOP_P", builtIn.topP),
@@ -138,6 +148,10 @@ function getQdrantConfig() {
     collectionName: process.env.QDRANT_COLLECTION ?? DEFAULT_QDRANT_COLLECTION,
     indexId: process.env.QDRANT_INDEX_ID ?? DEFAULT_QDRANT_INDEX_ID,
   };
+}
+
+function isRetrievalDebugEnabled() {
+  return process.env.RAG_DEBUG_RETRIEVAL === "true";
 }
 
 function getProviderEnv(id, key) {
@@ -185,4 +199,5 @@ module.exports = {
   getConfiguredProviders,
   getEmbeddingProviderConfig,
   getQdrantConfig,
+  isRetrievalDebugEnabled,
 };

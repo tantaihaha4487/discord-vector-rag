@@ -1,20 +1,28 @@
 function retrieveRelevantDocs(chunks, query, limit) {
+  return retrieveRelevantDocsWithScores(chunks, query, limit).map(
+    (result) => result.doc,
+  );
+}
+
+function retrieveRelevantDocsWithScores(chunks, query, limit) {
   const queryTerms = tokenize(query);
   const exactNumbers = queryTerms.filter((term) => /^\d{4,}$/.test(term));
   const scoredChunks = chunks
     .map((chunk) => ({
-      chunk,
+      doc: chunk,
       score: scoreDocument(chunk.pageContent, queryTerms),
+      source: "keyword",
     }))
     .filter((result) => result.score > 0);
   const exactMatches = scoredChunks.filter((result) =>
-    exactNumbers.some((number) => normalizeText(result.chunk.pageContent).includes(number)),
+    exactNumbers.some((number) =>
+      normalizeText(result.doc.pageContent).includes(number),
+    ),
   );
 
   return (exactMatches.length > 0 ? exactMatches : scoredChunks)
     .sort((a, b) => b.score - a.score)
-    .slice(0, limit)
-    .map((result) => result.chunk);
+    .slice(0, limit);
 }
 
 function scoreDocument(text, queryTerms) {
@@ -67,4 +75,9 @@ function normalizeText(text) {
     .trim();
 }
 
-module.exports = { retrieveRelevantDocs };
+module.exports = {
+  retrieveRelevantDocs,
+  retrieveRelevantDocsWithScores,
+  tokenize,
+  normalizeText,
+};

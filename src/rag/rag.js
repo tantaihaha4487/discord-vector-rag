@@ -1,11 +1,13 @@
 const { HumanMessage, SystemMessage } = require("@langchain/core/messages");
 const { RETRIEVAL_LIMIT } = require("./config");
+const { retrieveHybridDocs } = require("./hybrid-retriever");
 
 const systemPrompt =
   "You are a helpful assistant. Answer using only the provided context. If the answer is not in the context, say you don't know.";
 
-async function answerQuestion(llm, vectorStore, question, provider) {
-  const retrievedDocs = await vectorStore.similaritySearch(
+async function answerQuestion(llm, knowledgeBase, question, provider) {
+  const retrievedDocs = await retrieveHybridDocs(
+    knowledgeBase,
     question,
     RETRIEVAL_LIMIT,
   );
