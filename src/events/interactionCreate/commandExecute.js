@@ -15,11 +15,26 @@ module.exports = async (interaction) => {
       ephemeral: true,
     };
 
-    if (interaction.deferred || interaction.replied) {
-      await interaction.editReply(reply);
-      return;
-    }
+    try {
+      if (interaction.deferred || interaction.replied) {
+        await interaction.editReply(reply);
+        return;
+      }
 
-    await interaction.reply(reply);
+      await interaction.reply(reply);
+    } catch (replyError) {
+      if (isExpiredInteraction(replyError)) {
+        console.warn(
+          `Could not respond to expired interaction for ${interaction.commandName}.`,
+        );
+        return;
+      }
+
+      throw replyError;
+    }
   }
 };
+
+function isExpiredInteraction(error) {
+  return error?.code === 10062 || error?.code === 40060;
+}

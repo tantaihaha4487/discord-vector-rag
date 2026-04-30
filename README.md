@@ -151,45 +151,28 @@ You only need to redeploy slash commands when command definitions change.
 
 ## Run With Docker Compose
 
-Use this when Docker Compose is installed.
+Use this when Docker Compose is installed. This starts Qdrant, Ollama, pulls the embedding model, and starts the bot.
 
-1. Pull Qdrant first if you want to test image availability:
-
-```bash
-docker pull qdrant/qdrant:latest
-```
-
-2. Start Qdrant and the Discord bot:
+1. Start the stack:
 
 ```bash
 docker compose up -d --build
 ```
 
-Inside Compose, the bot uses `QDRANT_URL=http://qdrant:6333`. Your local `.env` can keep `QDRANT_URL=http://localhost:6333` for non-container runs.
+Inside Compose, the bot uses `QDRANT_URL=http://qdrant:6333` and `OLLAMA_BASE_URL=http://ollama:11434`. The `ollama-model` service pulls `nomic-embed-text` automatically before the bot starts.
 
-If the bot runs in Docker and Ollama runs on the host machine, use:
+No host Ollama install is required for Docker Compose. The first run downloads the Qdrant image, Ollama image, Node dependencies, and the embedding model, so it can take several minutes and use extra disk space.
 
-```env
-OLLAMA_BASE_URL=http://host.docker.internal:11434
-```
-
-The Compose file includes this Linux host mapping for the bot service:
-
-```yaml
-extra_hosts:
-  - "host.docker.internal:host-gateway"
-```
-
-If the bot runs locally outside Docker, use:
-
-```env
-OLLAMA_BASE_URL=http://localhost:11434
-```
-
-3. Watch bot logs:
+2. Watch bot logs:
 
 ```bash
 docker compose logs -f bot
+```
+
+3. Watch model pull logs:
+
+```bash
+docker compose logs -f ollama-model
 ```
 
 4. Stop the stack:
@@ -198,7 +181,20 @@ docker compose logs -f bot
 docker compose down
 ```
 
-Qdrant data is stored in the named Docker volume `qdrant_storage`.
+Qdrant data is stored in `qdrant_storage`. Ollama models are stored in `ollama_storage`.
+
+The Compose file does not publish Qdrant or Ollama ports to the host by default, which avoids port conflicts on fresh machines. If you need host access for debugging, add a local override file:
+
+```yaml
+services:
+  qdrant:
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+  ollama:
+    ports:
+      - "11434:11434"
+```
 
 ## Run Without Docker Compose
 
