@@ -1,12 +1,26 @@
 services:
   qdrant:
     image: qdrant/qdrant:latest
-    ports:
-      - "6333:6333"
-      - "6334:6334"
     volumes:
       - qdrant_storage:/qdrant/storage
     restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama_storage:/root/.ollama
+    restart: unless-stopped
+
+  ollama-model:
+    image: ollama/ollama:latest
+    entrypoint: ["/bin/sh", "-c"]
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+      OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}
+    command:
+      - until ollama list; do sleep 2; done; ollama pull "$${OLLAMA_EMBEDDING_MODEL}"
+    depends_on:
+      - ollama
 
   bot:
     build: .
@@ -16,11 +30,19 @@ services:
       QDRANT_URL: http://qdrant:6333
       QDRANT_COLLECTION: ${QDRANT_COLLECTION:-discord_vector_rag}
       QDRANT_INDEX_ID: ${QDRANT_INDEX_ID:-discord-vector-rag}
+      EMBEDDING_PROVIDER: ollama
+      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}
+      RAG_DEBUG_RETRIEVAL: ${RAG_DEBUG_RETRIEVAL:-true}
     volumes:
       - ./data:/app/data:ro
     depends_on:
-      - qdrant
+      qdrant:
+        condition: service_started
+      ollama-model:
+        condition: service_completed_successfully
     restart: unless-stopped
 
 volumes:
   qdrant_storage:
+  ollama_storage:

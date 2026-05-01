@@ -6,12 +6,12 @@ const { getKnowledgeVectorStore } = require("./vector-store");
 async function askKnowledgeBase(question) {
   assertConfig();
 
-  const vectorStore = await getKnowledgeVectorStore();
+  const knowledgeBase = await getKnowledgeVectorStore();
 
-  return answerWithFallback(vectorStore, question);
+  return answerWithFallback(knowledgeBase, question);
 }
 
-async function answerWithFallback(vectorStore, question) {
+async function answerWithFallback(knowledgeBase, question) {
   const providers = getConfiguredProviders();
   let lastError;
 
@@ -19,7 +19,7 @@ async function answerWithFallback(vectorStore, question) {
     try {
       return await answerQuestion(
         createChatModel(provider),
-        vectorStore,
+        knowledgeBase,
         question,
         provider,
       );

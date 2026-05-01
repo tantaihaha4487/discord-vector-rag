@@ -31,22 +31,16 @@ module.exports = {
 };
 
 function formatResponse(result) {
-  const provider = result.providerName
-    ? `\n\nProvider: ${result.providerName}`
-    : "";
   const sources = result.sources.length
     ? `\n\nSources:\n${result.sources.map((source) => `- ${source}`).join("\n")}`
     : "";
-  const response = `${result.answer}${provider}${sources}`;
+  const response = `${result.answer}${sources}`;
 
   if (response.length <= 2000) return response;
 
-  const availableAnswerLength = Math.max(
-    0,
-    1900 - provider.length - sources.length,
-  );
+  const availableAnswerLength = Math.max(0, 1900 - sources.length);
 
-  return `${result.answer.slice(0, availableAnswerLength)}...${provider}${sources}`;
+  return `${result.answer.slice(0, availableAnswerLength)}...${sources}`;
 }
 
 function getUserFacingError(error) {

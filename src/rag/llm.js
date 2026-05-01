@@ -21,11 +21,62 @@ function createEmbeddingModel(provider) {
     throw new Error(`Missing embedding model for provider ${provider.name}.`);
   }
 
+  if (provider.id === "ollama") {
+    return new OllamaEmbeddings({
+      baseUrl: provider.baseURL,
+      model: provider.embeddingModel,
+    });
+  }
+
   return new OpenAIEmbeddings({
     model: provider.embeddingModel,
     apiKey: provider.apiKey,
     configuration: getProviderConfiguration(provider),
   });
+}
+
+class OllamaEmbeddings {
+  constructor({ baseUrl, model }) {
+    this.baseUrl = (baseUrl ?? "http://localhost:11434").replace(/\/$/, "");
+    this.model = model;
+  }
+
+  async embedDocuments(texts) {
+    return this.embed(texts);
+  }
+
+  async embedQuery(text) {
+    const [embedding] = await this.embed([text]);
+
+    return embedding;
+  }
+
+  async embed(input) {
+    const response = await fetch(`${this.baseUrl}/api/embed`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: this.model, input }),
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `Ollama embedding request failed with ${response.status}: ${await response.text()}`,
+      );
+    }
+
+    const data = await response.json();
+    const embeddings = data.embeddings ?? data.embedding;
+
+    if (!Array.isArray(embeddings)) {
+      throw new Error("Ollama embedding response did not include embeddings.");
+    }
+
+    if (embeddings.length > 0 && typeof embeddings[0] === "number") {
+      return [embeddings];
+    }
+
+    return embeddings;
+  }
 }
 
 function getProviderConfiguration(provider) {
@@ -55,4 +106,5 @@ function getProviderModelKwargs(provider) {
 module.exports = {
   createEmbeddingModel,
   createChatModel,
+  OllamaEmbeddings,
 };
