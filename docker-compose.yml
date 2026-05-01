@@ -33,7 +33,7 @@ services:
       EMBEDDING_PROVIDER: ollama
       OLLAMA_BASE_URL: http://ollama:11434
       OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}
-      RAG_DEBUG_RETRIEVAL: ${RAG_DEBUG_RETRIEVAL:-false}
+      RAG_DEBUG_RETRIEVAL: ${RAG_DEBUG_RETRIEVAL:-true}
     volumes:
       - ./data:/app/data:ro
     depends_on:

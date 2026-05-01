@@ -52,20 +52,11 @@ class OllamaEmbeddings {
   }
 
   async embed(input) {
-    let response;
-
-    try {
-      response = await fetch(`${this.baseUrl}/api/embed`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: this.model, input }),
-      });
-    } catch (error) {
-      throw new Error(
-        `Ollama is not reachable at ${this.baseUrl}. Start Ollama or use Docker Compose.`,
-        { cause: error },
-      );
-    }
+    const response = await fetch(`${this.baseUrl}/api/embed`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: this.model, input }),
+    });
 
     if (!response.ok) {
       throw new Error(
