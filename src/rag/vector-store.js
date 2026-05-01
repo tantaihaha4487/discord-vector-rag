@@ -8,7 +8,17 @@ const { createEmbeddingModel } = require("./llm");
 let vectorStorePromise;
 
 async function getKnowledgeVectorStore() {
-  vectorStorePromise ??= buildKnowledgeVectorStore();
+  if (!vectorStorePromise) {
+    const currentPromise = buildKnowledgeVectorStore().catch((error) => {
+      if (vectorStorePromise === currentPromise) {
+        vectorStorePromise = undefined;
+      }
+
+      throw error;
+    });
+
+    vectorStorePromise = currentPromise;
+  }
 
   return vectorStorePromise;
 }
