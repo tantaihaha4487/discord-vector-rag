@@ -1,5 +1,9 @@
 const { SlashCommandBuilder } = require("@discordjs/builders");
+const { EmbedBuilder } = require("discord.js");
 const { askKnowledgeBase } = require("../rag/service");
+
+const MESSAGE_CHUNK_LENGTH = 3000;
+const MISINFORMATION_NOTICE = "AI might contain misinformation.";
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -21,7 +25,7 @@ module.exports = {
       const result = await askKnowledgeBase(question);
       const response = formatResponse(result);
 
-      await interaction.editReply(response);
+      await sendChunkedResponse(interaction, response);
     } catch (error) {
       console.error("Error answering RAG question:", error);
 
@@ -34,13 +38,33 @@ function formatResponse(result) {
   const sources = result.sources.length
     ? `\n\nSources:\n${result.sources.map((source) => `- ${source}`).join("\n")}`
     : "";
-  const response = `${result.answer}${sources}`;
+  return `${result.answer}${sources}`;
+}
 
-  if (response.length <= 2000) return response;
+async function sendChunkedResponse(interaction, response) {
+  const chunks = chunkMessage(response, MESSAGE_CHUNK_LENGTH);
 
-  const availableAnswerLength = Math.max(0, 1900 - sources.length);
+  await interaction.editReply({ embeds: [createResponseEmbed(chunks[0])] });
 
-  return `${result.answer.slice(0, availableAnswerLength)}...${sources}`;
+  for (const chunk of chunks.slice(1)) {
+    await interaction.followUp({ embeds: [createResponseEmbed(chunk)] });
+  }
+}
+
+function chunkMessage(message, chunkLength) {
+  const chunks = [];
+
+  for (let index = 0; index < message.length; index += chunkLength) {
+    chunks.push(message.slice(index, index + chunkLength));
+  }
+
+  return chunks.length ? chunks : ["No response."];
+}
+
+function createResponseEmbed(description) {
+  return new EmbedBuilder()
+    .setDescription(description)
+    .setFooter({ text: MISINFORMATION_NOTICE });
 }
 
 function getUserFacingError(error) {
