@@ -17,7 +17,7 @@ Discord.js v14 bot with a `/ask` slash command backed by local knowledge files, 
 
 - Slash command loader from the original Discord.js template
 - `/ask` command for questions against local knowledge files
-- Supports `.txt` and `.pdf` files in `data/`
+- Supports `.txt` and `.pdf` files in `data/` and nested folders
 - Keyword-first retrieval for exact/factual questions
 - Qdrant semantic retrieval for general questions
 - Local Ollama embedding configuration
@@ -315,7 +315,7 @@ Examples:
 /ask question: Data Science and Software Innovation เรียนเกี่ยวกับอะไร
 ```
 
-On startup, the bot loads files from `data/`, chunks them, clears its own `QDRANT_INDEX_ID` points from Qdrant, and indexes the current chunks before searching.
+On startup, the bot loads files from `data/` and its subfolders, chunks them, clears its own `QDRANT_INDEX_ID` points from Qdrant, and indexes the current chunks before searching.
 
 ## Provider Reference
 
@@ -348,7 +348,7 @@ Custom OpenAI-compatible endpoints also work by adding a provider name to `AI_PR
 ## Structure
 
 ```text
-data/                      Local RAG knowledge files
+data/                      Local RAG knowledge files, scanned recursively
 src/commands/ask.js        Discord slash command for RAG
 src/rag/                   RAG loading, Qdrant retrieval, LLM, and answer flow
 src/events/                Discord event handlers
