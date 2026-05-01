@@ -44,18 +44,12 @@ function formatResponse(result) {
 }
 
 function getUserFacingError(error) {
-  if (
-    error.message ===
-    "Missing provider configuration in .env. Set AI_PROVIDERS and AI_PROVIDER_<NAME>_API_KEY."
-  ) {
-    return "RAG is not configured yet. Set AI_PROVIDERS and AI_PROVIDER_<NAME>_API_KEY in .env.";
+  if (error.message?.startsWith("No chat provider is configured.")) {
+    return "RAG is not configured yet. Set one provider API key in .env, for example AI_PROVIDER_OPENROUTER_API_KEY. Fallback providers are optional.";
   }
 
-  if (
-    error.message ===
-    "Missing embedding provider configuration in .env. Set EMBEDDING_PROVIDER and AI_PROVIDER_<NAME>_API_KEY."
-  ) {
-    return "Vector search is not configured yet. Set EMBEDDING_PROVIDER and AI_PROVIDER_<NAME>_API_KEY in .env.";
+  if (error.message?.startsWith("Missing embedding")) {
+    return `Vector search is not configured yet. ${error.message}`;
   }
 
   if (error.message === "No .txt or .pdf files found in data/") {
@@ -66,11 +60,11 @@ function getUserFacingError(error) {
     return "AI provider rate limit hit. Retry later or change AI_PROVIDERS/model configuration.";
   }
 
-  if (
-    error?.code === "ECONNREFUSED" ||
-    error?.message?.includes("fetch failed") ||
-    error?.message?.includes("Qdrant")
-  ) {
+  if (error?.message?.includes("Ollama")) {
+    return "Ollama embeddings are not reachable. Run with Docker Compose or start Ollama and pull nomic-embed-text.";
+  }
+
+  if (error?.code === "ECONNREFUSED" || error?.message?.includes("Qdrant")) {
     return "Qdrant is not reachable. Start it with docker compose up -d qdrant and retry.";
   }
 

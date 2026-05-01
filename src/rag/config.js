@@ -1,13 +1,13 @@
-const DEFAULT_PROVIDER_IDS = ["openrouter", "nvidia"];
+const DEFAULT_PROVIDER_IDS = ["openrouter"];
 const DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434";
 const DEFAULT_OLLAMA_EMBEDDING_MODEL = "nomic-embed-text";
 
 const BUILT_IN_PROVIDERS = {
   ollama: {
     name: "Ollama",
-    baseURL: process.env.OLLAMA_BASE_URL ?? DEFAULT_OLLAMA_BASE_URL,
+    baseURL: getEnvValue("OLLAMA_BASE_URL") ?? DEFAULT_OLLAMA_BASE_URL,
     embeddingModel:
-      process.env.OLLAMA_EMBEDDING_MODEL ?? DEFAULT_OLLAMA_EMBEDDING_MODEL,
+      getEnvValue("OLLAMA_EMBEDDING_MODEL") ?? DEFAULT_OLLAMA_EMBEDDING_MODEL,
   },
   openrouter: {
     name: "OpenRouter",
@@ -66,7 +66,6 @@ const CHUNK_SIZE = 1200;
 const CHUNK_OVERLAP = 180;
 const RETRIEVAL_LIMIT = 8;
 const DEFAULT_EMBEDDING_PROVIDER_ID = "ollama";
-const DEFAULT_EMBEDDING_MODEL = DEFAULT_OLLAMA_EMBEDDING_MODEL;
 const DEFAULT_QDRANT_URL = "http://localhost:6333";
 const DEFAULT_QDRANT_COLLECTION = "discord_vector_rag";
 const DEFAULT_QDRANT_INDEX_ID = "discord-vector-rag";
@@ -77,13 +76,19 @@ function assertConfig() {
 
   if (!providers.length) {
     throw new Error(
-      "Missing provider configuration in .env. Set AI_PROVIDERS and AI_PROVIDER_<NAME>_API_KEY.",
+      "No chat provider is configured. Set one provider API key in .env, for example AI_PROVIDER_OPENROUTER_API_KEY. Fallback providers are optional.",
     );
   }
 
   if (embeddingProvider.id !== "ollama" && !embeddingProvider.apiKey) {
     throw new Error(
-      "Missing embedding provider configuration in .env. Set EMBEDDING_PROVIDER and AI_PROVIDER_<NAME>_API_KEY.",
+      `Missing embedding provider API key. Set ${getProviderEnvName(embeddingProvider.id, "API_KEY")} or use EMBEDDING_PROVIDER=ollama.`,
+    );
+  }
+
+  if (embeddingProvider.id !== "ollama" && !embeddingProvider.embeddingModel) {
+    throw new Error(
+      `Missing embedding model for ${embeddingProvider.name}. Set ${getProviderEnvName(embeddingProvider.id, "EMBEDDING_MODEL")} or use EMBEDDING_PROVIDER=ollama.`,
     );
   }
 }
@@ -95,7 +100,7 @@ function getConfiguredProviders() {
 }
 
 function getProviderIds() {
-  return (process.env.AI_PROVIDERS ?? DEFAULT_PROVIDER_IDS.join(","))
+  return (getEnvValue("AI_PROVIDERS") ?? DEFAULT_PROVIDER_IDS.join(","))
     .split(",")
     .map((provider) => provider.trim().toLowerCase())
     .filter(Boolean);
@@ -128,34 +133,46 @@ function getProviderConfig(id) {
 
 function getEmbeddingProviderConfig() {
   const id = (
-    process.env.EMBEDDING_PROVIDER ?? DEFAULT_EMBEDDING_PROVIDER_ID
+    getEnvValue("EMBEDDING_PROVIDER") ?? DEFAULT_EMBEDDING_PROVIDER_ID
   ).trim().toLowerCase();
   const provider = getProviderConfig(id);
+  const embeddingModel =
+    getProviderEnv(id, "EMBEDDING_MODEL") ?? provider.embeddingModel;
 
   return {
     ...provider,
     embeddingModel:
-      getProviderEnv(id, "EMBEDDING_MODEL") ??
-      provider.embeddingModel ??
-      DEFAULT_EMBEDDING_MODEL,
+      id === "ollama"
+        ? embeddingModel ?? DEFAULT_OLLAMA_EMBEDDING_MODEL
+        : embeddingModel,
   };
 }
 
 function getQdrantConfig() {
   return {
-    url: process.env.QDRANT_URL ?? DEFAULT_QDRANT_URL,
-    apiKey: process.env.QDRANT_API_KEY,
-    collectionName: process.env.QDRANT_COLLECTION ?? DEFAULT_QDRANT_COLLECTION,
-    indexId: process.env.QDRANT_INDEX_ID ?? DEFAULT_QDRANT_INDEX_ID,
+    url: getEnvValue("QDRANT_URL") ?? DEFAULT_QDRANT_URL,
+    apiKey: getEnvValue("QDRANT_API_KEY"),
+    collectionName: getEnvValue("QDRANT_COLLECTION") ?? DEFAULT_QDRANT_COLLECTION,
+    indexId: getEnvValue("QDRANT_INDEX_ID") ?? DEFAULT_QDRANT_INDEX_ID,
   };
 }
 
 function isRetrievalDebugEnabled() {
-  return process.env.RAG_DEBUG_RETRIEVAL === "true";
+  return getEnvValue("RAG_DEBUG_RETRIEVAL") === "true";
 }
 
 function getProviderEnv(id, key) {
-  return process.env[`AI_PROVIDER_${formatEnvProviderId(id)}_${key}`];
+  return getEnvValue(getProviderEnvName(id, key));
+}
+
+function getProviderEnvName(id, key) {
+  return `AI_PROVIDER_${formatEnvProviderId(id)}_${key}`;
+}
+
+function getEnvValue(name) {
+  const value = process.env[name]?.trim();
+
+  return value || undefined;
 }
 
 function getNumberProviderEnv(id, key, fallback) {
