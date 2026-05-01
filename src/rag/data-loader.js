@@ -28,9 +28,9 @@ async function loadKnowledgeBase() {
 }
 
 async function loadDocuments() {
-  const files = await readdir(dataDir).catch(() => []);
-  const supportedFiles = files.filter((file) =>
-    supportedExtensions.has(path.extname(file).toLowerCase()),
+  const files = await listDataFiles(dataDir);
+  const supportedFiles = files.filter(({ relativePath }) =>
+    supportedExtensions.has(path.extname(relativePath).toLowerCase()),
   );
 
   if (supportedFiles.length === 0) {
@@ -38,15 +38,39 @@ async function loadDocuments() {
   }
 
   return Promise.all(
-    supportedFiles.map(async (file) => {
-      const filePath = path.join(dataDir, file);
-
+    supportedFiles.map(async ({ filePath, relativePath }) => {
       return new Document({
         pageContent: await loadFileText(filePath),
-        metadata: { source: file },
+        metadata: { source: relativePath },
       });
     }),
   );
+}
+
+async function listDataFiles(dir, baseDir = dir) {
+  const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+  const files = await Promise.all(
+    entries.map(async (entry) => {
+      const filePath = path.join(dir, entry.name);
+
+      if (entry.isDirectory()) {
+        return listDataFiles(filePath, baseDir);
+      }
+
+      if (!entry.isFile()) {
+        return [];
+      }
+
+      return [
+        {
+          filePath,
+          relativePath: path.relative(baseDir, filePath).split(path.sep).join("/"),
+        },
+      ];
+    }),
+  );
+
+  return files.flat();
 }
 
 async function loadFileText(filePath) {

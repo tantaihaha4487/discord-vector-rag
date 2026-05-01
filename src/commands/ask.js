@@ -77,7 +77,7 @@ function getUserFacingError(error) {
   }
 
   if (error.message === "No .txt or .pdf files found in data/") {
-    return "No knowledge files found. Add .txt or .pdf files to data/.";
+    return "No knowledge files found. Add .txt or .pdf files to data/ or its subfolders.";
   }
 
   if (error?.status === 429 || error?.lc_error_code === "MODEL_RATE_LIMIT") {

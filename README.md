@@ -54,15 +54,17 @@ Paste your real Discord credentials and provider API key after `=`. You only nee
 
 4. Add knowledge files:
 
-Place `.txt` or `.pdf` files in `data/`.
+Place `.txt` or `.pdf` files in `data/` or folders inside `data/`.
 
 Example:
 
 ```text
 data/
   admissions-ubu-2569.txt
-  handbook.pdf
-  faq.txt
+  handbooks/
+    handbook.pdf
+  faq/
+    faq.txt
 ```
 
 5. Deploy Discord slash commands:
@@ -162,8 +164,8 @@ Supported file types:
 
 Data rules:
 
-- Put each source document directly inside `data/`.
-- Subfolders inside `data/` are not scanned.
+- Put source documents inside `data/` or folders inside `data/`.
+- Subfolders inside `data/` are scanned recursively.
 - Keep filenames descriptive because filenames are shown in Discord as `Sources`.
 - Do not put secrets, API keys, or private credentials in knowledge files.
 - Large PDFs work, but they create more chunks and may appear more often in retrieval results.
