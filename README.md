@@ -2,6 +2,8 @@
 
 Discord.js v14 bot with a `/ask` slash command backed by local knowledge files, image text extraction, keyword routing, Ollama local embeddings, Qdrant vector search, and configurable OpenAI-compatible chat providers.
 
+Detailed documentation lives in [`docs/`](docs/README.md): [setup](docs/setup.md), [configuration](docs/configuration.md), [knowledge files](docs/knowledge-files.md), [operations](docs/operations.md), [providers](docs/providers.md), [architecture](docs/architecture.md), and [troubleshooting](docs/troubleshooting.md).
+
 ## Tech Stack
 
 - Node.js
