@@ -15,19 +15,23 @@ function registerCommands(client) {
   const commandFile = getJsFiles(commandsDir);
 
   for (const file of commandFile) {
-    try {
-      const command = require(file);
+    registerCommand(client, file);
+  }
+}
 
-      if (!command?.data || typeof command?.execute !== "function") {
-        console.error(`Invalid command at ${file}`);
-        continue;
-      }
+function registerCommand(client, file) {
+  try {
+    const command = require(file);
 
-      client.commands.set(command.data.name, command);
-      console.log(`Registered command: ${command.data.name}`);
-    } catch (error) {
-      console.error(`Error loading command at ${file}:`, error);
+    if (!command?.data || typeof command?.execute !== "function") {
+      console.error(`Invalid command at ${file}`);
+      return;
     }
+
+    client.commands.set(command.data.name, command);
+    console.log(`Registered command: ${command.data.name}`);
+  } catch (error) {
+    console.error(`Error loading command at ${file}:`, error);
   }
 }
 
@@ -47,27 +51,31 @@ function registerEvents(client) {
     const eventFiles = getJsFiles(eventFolderPath);
 
     for (const file of eventFiles) {
-      const eventPath = `${eventName}/${path.basename(file, ".js")}`;
-
-      try {
-        const event = require(file);
-        const execute = typeof event === "function" ? event : event?.execute;
-
-        if (!execute || typeof execute !== "function") {
-          console.error(`Invalid event at ${file}`);
-          continue;
-        }
-
-        client.events.push({ name: eventPath, execute });
-
-        const method = eventName === "ready" ? "once" : "on";
-        client[method](eventName, (...args) => execute(...args));
-
-        console.log(`Registered event: ${eventPath}`);
-      } catch (error) {
-        console.error(`Error loading event at ${file}:`, error);
-      }
+      registerEvent(client, eventName, file);
     }
+  }
+}
+
+function registerEvent(client, eventName, file) {
+  const eventPath = `${eventName}/${path.basename(file, ".js")}`;
+
+  try {
+    const event = require(file);
+    const execute = typeof event === "function" ? event : event?.execute;
+
+    if (typeof execute !== "function") {
+      console.error(`Invalid event at ${file}`);
+      return;
+    }
+
+    client.events.push({ name: eventPath, execute });
+
+    const method = eventName === "ready" ? "once" : "on";
+    client[method](eventName, (...args) => execute(...args));
+
+    console.log(`Registered event: ${eventPath}`);
+  } catch (error) {
+    console.error(`Error loading event at ${file}:`, error);
   }
 }
 

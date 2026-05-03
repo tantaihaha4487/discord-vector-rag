@@ -126,18 +126,24 @@ async function ensureCollection(client, collectionName, vectorSize) {
     (collection) => collection.name === collectionName,
   );
 
-  if (exists) {
-    const info = await client.getCollection(collectionName);
-    const existingSize = getCollectionVectorSize(info);
-
-    if (existingSize === vectorSize) return;
-
-    console.warn(
-      `Recreating Qdrant collection ${collectionName}: vector size changed from ${existingSize ?? "unknown"} to ${vectorSize}.`,
-    );
-    await client.deleteCollection(collectionName);
+  if (!exists) {
+    await createCollection(client, collectionName, vectorSize);
+    return;
   }
 
+  const info = await client.getCollection(collectionName);
+  const existingSize = getCollectionVectorSize(info);
+
+  if (existingSize === vectorSize) return;
+
+  console.warn(
+    `Recreating Qdrant collection ${collectionName}: vector size changed from ${existingSize ?? "unknown"} to ${vectorSize}.`,
+  );
+  await client.deleteCollection(collectionName);
+  await createCollection(client, collectionName, vectorSize);
+}
+
+async function createCollection(client, collectionName, vectorSize) {
   await client.createCollection(collectionName, {
     vectors: {
       size: vectorSize,

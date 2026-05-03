@@ -24,11 +24,7 @@ async function extractImageText(filePath, relativePath) {
   const config = getImageTextConfig();
   const file = await stat(filePath);
 
-  if (file.size > config.maxBytes) {
-    throw new Error(
-      `Image ${relativePath} is too large for inline extraction. Maximum size is ${config.maxBytes} bytes.`,
-    );
-  }
+  assertImageWithinLimit(file.size, config, relativePath);
 
   const image = await readFile(filePath);
   const fileSha256 = createSha256(image);
@@ -41,11 +37,7 @@ async function extractImageText(filePath, relativePath) {
     return createResult(cached, config, mimeType, cacheKey);
   }
 
-  if (image.byteLength > config.maxBytes) {
-    throw new Error(
-      `Image ${relativePath} is too large for inline extraction. Maximum size is ${config.maxBytes} bytes.`,
-    );
-  }
+  assertImageWithinLimit(image.byteLength, config, relativePath);
 
   const text = await requestImageText(config, image, mimeType);
   await writeCache(cachePath, {
@@ -60,6 +52,14 @@ async function extractImageText(filePath, relativePath) {
   });
 
   return createResult(text, config, mimeType, cacheKey);
+}
+
+function assertImageWithinLimit(size, config, relativePath) {
+  if (size <= config.maxBytes) return;
+
+  throw new Error(
+    `Image ${relativePath} is too large for inline extraction. Maximum size is ${config.maxBytes} bytes.`,
+  );
 }
 
 function createResult(text, config, mimeType, cacheKey) {

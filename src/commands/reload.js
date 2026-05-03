@@ -22,25 +22,9 @@ module.exports = {
     await interaction.deferReply({ ephemeral: true });
 
     const allowedByCurrentConfig = canUseAdminCommand(interaction);
-    let nextConfig;
-    let allowedByNextConfig = false;
+    const access = await getReloadAccess(interaction, allowedByCurrentConfig);
 
-    try {
-      nextConfig = readConfigFile();
-      allowedByNextConfig = canUseAdminCommand(
-        interaction,
-        getDiscordConfigFrom(nextConfig),
-      );
-    } catch (error) {
-      if (!allowedByCurrentConfig) {
-        await interaction.editReply({ embeds: [createNotAllowedEmbed(interaction)] });
-        return;
-      }
-
-      throw error;
-    }
-
-    if (!allowedByCurrentConfig && !allowedByNextConfig) {
+    if (!access.allowed) {
       await interaction.editReply({ embeds: [createNotAllowedEmbed(interaction)] });
       return;
     }
@@ -50,7 +34,7 @@ module.exports = {
 
     try {
       before = getConfigSnapshot();
-      reloadConfig(nextConfig);
+      reloadConfig(access.nextConfig);
       after = getConfigSnapshot();
     } catch (error) {
       await interaction.editReply({ embeds: [createErrorEmbed(error)] });
@@ -62,6 +46,27 @@ module.exports = {
     await interaction.editReply({ embeds: [createSuccessEmbed(after, warnings)] });
   },
 };
+
+async function getReloadAccess(interaction, allowedByCurrentConfig) {
+  try {
+    const nextConfig = readConfigFile();
+    const allowedByNextConfig = canUseAdminCommand(
+      interaction,
+      getDiscordConfigFrom(nextConfig),
+    );
+
+    return {
+      allowed: allowedByCurrentConfig || allowedByNextConfig,
+      nextConfig,
+    };
+  } catch (error) {
+    if (!allowedByCurrentConfig) {
+      return { allowed: false };
+    }
+
+    throw error;
+  }
+}
 
 function getConfigSnapshot() {
   const discord = getDiscordConfig();

@@ -76,20 +76,7 @@ module.exports = {
       });
 
       await saveAttachment(attachment.url, target.filePath, target.directoryPath);
-
-      try {
-        const stats = await refreshKnowledgeVectorStore();
-
-        await interaction.editReply({
-          embeds: [createSuccessEmbed(target.relativePath, stats)],
-        });
-      } catch (error) {
-        console.error("Error refreshing RAG index after upload:", error);
-
-        await interaction.editReply({
-          embeds: [createRefreshFailedEmbed(target.relativePath, error)],
-        });
-      }
+      await refreshAfterUpload(interaction, target.relativePath);
     } catch (error) {
       console.error("Error uploading knowledge file:", error);
 
@@ -156,16 +143,15 @@ function normalizeFolder(folder) {
     .map((part) => part.trim())
     .filter(Boolean);
 
-  if (
-    parts.length === 0 ||
-    parts.some((part) =>
-      part === "." || part === ".." || /[<>:"|?*\x00-\x1F]/.test(part),
-    )
-  ) {
+  if (parts.length === 0 || parts.some(isInvalidFolderPart)) {
     throw new Error("Folder must be a relative path under `data/`.");
   }
 
   return parts.join("/");
+}
+
+function isInvalidFolderPart(part) {
+  return part === "." || part === ".." || /[<>:"|?*\x00-\x1F]/.test(part);
 }
 
 function sanitizeFilename(filename) {
@@ -197,6 +183,22 @@ async function saveAttachment(url, filePath, directoryPath) {
 
   await mkdir(directoryPath, { recursive: true });
   await writeFile(filePath, Buffer.from(await response.arrayBuffer()));
+}
+
+async function refreshAfterUpload(interaction, relativePath) {
+  try {
+    const stats = await refreshKnowledgeVectorStore();
+
+    await interaction.editReply({
+      embeds: [createSuccessEmbed(relativePath, stats)],
+    });
+  } catch (error) {
+    console.error("Error refreshing RAG index after upload:", error);
+
+    await interaction.editReply({
+      embeds: [createRefreshFailedEmbed(relativePath, error)],
+    });
+  }
 }
 
 function createSuccessEmbed(relativePath, stats) {
