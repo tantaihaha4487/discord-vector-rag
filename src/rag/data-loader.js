@@ -3,7 +3,7 @@ const path = require("node:path");
 const { Document } = require("@langchain/core/documents");
 const { RecursiveCharacterTextSplitter } = require("@langchain/textsplitters");
 const { PDFParse } = require("pdf-parse");
-const { CHUNK_OVERLAP, CHUNK_SIZE } = require("./config");
+const { getRetrievalConfig } = require("./config");
 const {
   extractImageText,
   isImageExtension,
@@ -20,9 +20,10 @@ const supportedFileTypes = [...supportedExtensions].join(", ");
 
 async function loadKnowledgeBase() {
   const documents = await loadDocuments();
+  const retrieval = getRetrievalConfig();
   const splitter = new RecursiveCharacterTextSplitter({
-    chunkSize: CHUNK_SIZE,
-    chunkOverlap: CHUNK_OVERLAP,
+    chunkSize: retrieval.chunkSize,
+    chunkOverlap: retrieval.chunkOverlap,
   });
 
   const chunks = await splitter.splitDocuments(documents);

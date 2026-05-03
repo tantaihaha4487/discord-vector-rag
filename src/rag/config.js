@@ -248,7 +248,11 @@ function getImageTextConfig() {
 }
 
 function getDiscordConfig() {
-  const discord = getObject(getAppConfig().discord, "discord");
+  return getDiscordConfigFrom(getAppConfig());
+}
+
+function getDiscordConfigFrom(config) {
+  const discord = getObject(config.discord, "discord");
 
   return {
     clientId: getDiscordId(discord.clientId, "discord.clientId"),
@@ -256,6 +260,10 @@ function getDiscordConfig() {
     adminUserIds: getDiscordIdList(
       discord.adminUserIds,
       "discord.adminUserIds",
+    ),
+    moderatorRoleIds: getDiscordIdList(
+      discord.moderatorRoleIds,
+      "discord.moderatorRoleIds",
     ),
   };
 }
@@ -290,6 +298,16 @@ function isAdminUser(userId) {
   return getDiscordConfig().adminUserIds.includes(userId);
 }
 
+function canUseAdminCommand(interaction, discordConfig = getDiscordConfig()) {
+  if (discordConfig.adminUserIds.includes(interaction.user.id)) return true;
+
+  const moderatorRoleIds = new Set(discordConfig.moderatorRoleIds);
+
+  return getInteractionRoleIds(interaction).some((roleId) =>
+    moderatorRoleIds.has(roleId),
+  );
+}
+
 function isRetrievalDebugEnabled() {
   return getRetrievalConfig().debug;
 }
@@ -304,24 +322,54 @@ function getYamlProvider(id) {
 function getAppConfig() {
   if (appConfig) return appConfig;
 
+  appConfig = readConfigFile();
+
+  return appConfig;
+}
+
+function readConfigFile() {
+  let config;
+
   if (!fs.existsSync(CONFIG_PATH)) {
-    appConfig = {};
-    return appConfig;
+    return {};
   }
 
   try {
-    appConfig = YAML.parse(fs.readFileSync(CONFIG_PATH, "utf8")) ?? {};
+    config = YAML.parse(fs.readFileSync(CONFIG_PATH, "utf8")) ?? {};
   } catch (error) {
     throw new Error(`Could not parse config.yaml: ${error.message}`, {
       cause: error,
     });
   }
 
-  if (!isPlainObject(appConfig)) {
+  if (!isPlainObject(config)) {
     throw new Error("config.yaml must contain a YAML object.");
   }
 
-  return appConfig;
+  return config;
+}
+
+function reloadConfig(nextConfig = readConfigFile()) {
+  const previousConfig = getAppConfig();
+
+  appConfig = nextConfig;
+
+  try {
+    validateLoadedConfig();
+  } catch (error) {
+    appConfig = previousConfig;
+    throw error;
+  }
+
+  return { previousConfig, currentConfig: appConfig };
+}
+
+function validateLoadedConfig() {
+  getDiscordConfig();
+  getEmbeddingProviderConfig();
+  getImageTextConfig();
+  getQdrantConfig();
+  getRetrievalConfig();
 }
 
 function getProviderEnv(id, key) {
@@ -400,6 +448,16 @@ function getDiscordIdList(value, configPath) {
     .filter(Boolean);
 }
 
+function getInteractionRoleIds(interaction) {
+  const roles = interaction.member?.roles;
+
+  if (!roles) return [];
+  if (Array.isArray(roles)) return roles;
+  if (roles.cache) return [...roles.cache.keys()];
+
+  return [];
+}
+
 function getStringMap(value, configPath) {
   if (value === undefined || value === null) return undefined;
 
@@ -467,19 +525,12 @@ function formatProviderName(id) {
     .join(" ");
 }
 
-const {
-  chunkSize: CHUNK_SIZE,
-  chunkOverlap: CHUNK_OVERLAP,
-  limit: RETRIEVAL_LIMIT,
-} = getRetrievalConfig();
-
 module.exports = {
-  CHUNK_SIZE,
-  CHUNK_OVERLAP,
-  RETRIEVAL_LIMIT,
   assertConfig,
+  canUseAdminCommand,
   getConfiguredProviders,
   getDiscordConfig,
+  getDiscordConfigFrom,
   getEmbeddingProviderConfig,
   getImageTextConfig,
   getProviderConfig,
@@ -487,4 +538,6 @@ module.exports = {
   getRetrievalConfig,
   isAdminUser,
   isRetrievalDebugEnabled,
+  readConfigFile,
+  reloadConfig,
 };

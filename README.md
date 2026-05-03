@@ -20,7 +20,8 @@ Discord.js v14 bot with a `/ask` slash command backed by local knowledge files, 
 - `/ask` command for questions against local knowledge files
 - `/upload` command for adding `.txt`, `.pdf`, or image files from Discord
 - `/refresh` command for rebuilding the Qdrant index without restarting
-- `/upload` and `/refresh` are restricted by `discord.adminUserIds` in `config.yaml`
+- `/reload` command for reloading `config.yaml` without restarting
+- `/upload`, `/refresh`, and `/reload` are restricted by `discord.adminUserIds` and `discord.moderatorRoleIds` in `config.yaml`
 - Supports `.txt`, `.pdf`, `.png`, `.jpg`, `.jpeg`, `.webp`, `.heic`, and `.heif` files in `data/` and nested folders
 - Caches extracted image text so unchanged images do not call the vision model again
 - Keyword-first retrieval for exact/factual questions
@@ -62,9 +63,10 @@ discord:
   clientId: "YOUR_CLIENT_ID"
   guildId: "YOUR_GUILD_ID"
   adminUserIds: []
+  moderatorRoleIds: []
 ```
 
-Keep Discord IDs quoted. Leave `adminUserIds: []` to disable admin commands, or add your Discord user ID if you want to use `/upload` and `/refresh`.
+Keep Discord IDs quoted. Leave both access lists empty to disable admin commands, or add your Discord user ID or moderator role IDs if you want to use `/upload`, `/refresh`, and `/reload`.
 
 5. Add knowledge files:
 
@@ -113,11 +115,19 @@ discord:
   guildId: "YOUR_GUILD_ID"
   adminUserIds:
     - "YOUR_DISCORD_USER_ID"
+  moderatorRoleIds:
+    - "YOUR_MODERATOR_ROLE_ID"
 ```
 
-`/ask` and `/ping` are public. `/upload` and `/refresh` only work for users listed in `discord.adminUserIds`.
+`/ask` and `/ping` are public. `/upload`, `/refresh`, and `/reload` only work for users listed in `discord.adminUserIds` or members with a role listed in `discord.moderatorRoleIds`.
 
-If `adminUserIds` is empty, `/upload` and `/refresh` are denied for everyone. Discord IDs must be quoted strings because they are larger than JavaScript's safe integer range.
+If both access lists are empty, `/upload`, `/refresh`, and `/reload` are denied for everyone. Discord IDs must be quoted strings because they are larger than JavaScript's safe integer range.
+
+### Runtime Config Reload
+
+Use `/reload` after editing `config.yaml` to apply normal config changes without restarting the bot. It reloads admin users, moderator roles, provider settings, retrieval settings, Qdrant settings, and image text settings.
+
+`/reload` does not reload `.env`; changing API keys or `BOT_TOKEN` still requires restarting the bot process. If reload changes embedding, Qdrant, chunking, or image text settings, run `/refresh` afterward so the vector index matches the new config.
 
 ### Fallback Chat Providers
 

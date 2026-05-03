@@ -8,7 +8,7 @@ const {
   supportedExtensions,
   supportedFileTypes,
 } = require("../rag/data-loader");
-const { getImageTextConfig, isAdminUser } = require("../rag/config");
+const { canUseAdminCommand, getImageTextConfig } = require("../rag/config");
 const { isImageExtension } = require("../rag/image-text");
 const { refreshKnowledgeVectorStore } = require("../rag/vector-store");
 
@@ -33,7 +33,7 @@ module.exports = {
     ),
 
   async autocomplete(interaction) {
-    if (!isAdminUser(interaction.user.id)) {
+    if (!canUseAdminCommand(interaction)) {
       await interaction.respond([]);
       return;
     }
@@ -52,7 +52,7 @@ module.exports = {
   },
 
   async execute(interaction) {
-    if (!isAdminUser(interaction.user.id)) {
+    if (!canUseAdminCommand(interaction)) {
       await replyNotAllowed(interaction);
       return;
     }
@@ -223,7 +223,7 @@ function createErrorEmbed(error) {
 
 async function replyNotAllowed(interaction) {
   await interaction.reply({
-    content: `Only users listed in \`discord.adminUserIds\` can use this command. Your user ID is \`${interaction.user.id}\`.`,
+    content: `Only users listed in \`discord.adminUserIds\` or members with \`discord.moderatorRoleIds\` can use this command. Your user ID is \`${interaction.user.id}\`.`,
     ephemeral: true,
   });
 }

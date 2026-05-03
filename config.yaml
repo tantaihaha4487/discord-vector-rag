@@ -2,6 +2,7 @@ discord:
   clientId: ""
   guildId: ""
   adminUserIds: []
+  moderatorRoleIds: []
 
 chat:
   providers:
@@ -68,6 +69,13 @@ embeddings:
   ollama:
     baseUrl: http://localhost:11434
     model: nomic-embed-text
+
+imageText:
+  provider: openrouter
+  model: google/gemini-2.5-flash
+  cacheDir: .cache/image-text
+  maxBytes: 15728640
+  promptVersion: v1
 
 retrieval:
   debug: false

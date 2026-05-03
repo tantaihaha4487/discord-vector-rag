@@ -1,5 +1,5 @@
 const { HumanMessage, SystemMessage } = require("@langchain/core/messages");
-const { RETRIEVAL_LIMIT } = require("./config");
+const { getRetrievalConfig } = require("./config");
 const { retrieveHybridDocs } = require("./hybrid-retriever");
 
 const systemPrompt = [
@@ -14,7 +14,7 @@ async function answerQuestion(llm, knowledgeBase, question, provider) {
   const retrievedDocs = await retrieveHybridDocs(
     knowledgeBase,
     question,
-    RETRIEVAL_LIMIT,
+    getRetrievalConfig().limit,
   );
   const context = retrievedDocs
     .map(
