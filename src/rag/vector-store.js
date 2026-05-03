@@ -6,8 +6,11 @@ const { loadKnowledgeBase } = require("./data-loader");
 const { createEmbeddingModel } = require("./llm");
 
 let vectorStorePromise;
+let refreshPromise;
 
 async function getKnowledgeVectorStore() {
+  if (refreshPromise) return refreshPromise;
+
   if (!vectorStorePromise) {
     const currentPromise = buildKnowledgeVectorStore().catch((error) => {
       if (vectorStorePromise === currentPromise) {
@@ -21,6 +24,33 @@ async function getKnowledgeVectorStore() {
   }
 
   return vectorStorePromise;
+}
+
+async function refreshKnowledgeVectorStore() {
+  if (refreshPromise) {
+    const knowledgeBase = await refreshPromise;
+
+    return getIndexStats(knowledgeBase);
+  }
+
+  const previousPromise = vectorStorePromise;
+  const currentPromise = buildKnowledgeVectorStore().catch((error) => {
+    vectorStorePromise = previousPromise;
+    throw error;
+  });
+
+  const activePromise = currentPromise.finally(() => {
+    if (refreshPromise === activePromise) {
+      refreshPromise = undefined;
+    }
+  });
+
+  refreshPromise = activePromise;
+  vectorStorePromise = activePromise;
+
+  const knowledgeBase = await refreshPromise;
+
+  return getIndexStats(knowledgeBase);
 }
 
 async function buildKnowledgeVectorStore() {
@@ -50,6 +80,8 @@ async function buildKnowledgeVectorStore() {
 
   return {
     chunks,
+    collectionName: qdrant.collectionName,
+    indexId: qdrant.indexId,
     similaritySearch: (query, limit) =>
       similaritySearch(
         client,
@@ -68,6 +100,16 @@ async function buildKnowledgeVectorStore() {
         query,
         limit,
       ),
+  };
+}
+
+function getIndexStats(knowledgeBase) {
+  return {
+    chunks: knowledgeBase.chunks.length,
+    files: new Set(knowledgeBase.chunks.map((chunk) => chunk.metadata.source))
+      .size,
+    collectionName: knowledgeBase.collectionName,
+    indexId: knowledgeBase.indexId,
   };
 }
 
@@ -237,4 +279,4 @@ function createDeterministicUuid(input) {
   ].join("-");
 }
 
-module.exports = { getKnowledgeVectorStore };
+module.exports = { getKnowledgeVectorStore, refreshKnowledgeVectorStore };

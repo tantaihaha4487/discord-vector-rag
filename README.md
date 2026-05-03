@@ -17,6 +17,9 @@ Discord.js v14 bot with a `/ask` slash command backed by local knowledge files, 
 
 - Slash command loader from the original Discord.js template
 - `/ask` command for questions against local knowledge files
+- `/upload` command for adding `.txt` or `.pdf` files from Discord
+- `/refresh` command for rebuilding the Qdrant index without restarting
+- `/upload` and `/refresh` require Discord's Manage Server permission
 - Supports `.txt` and `.pdf` files in `data/` and nested folders
 - Keyword-first retrieval for exact/factual questions
 - Qdrant semantic retrieval for general questions
@@ -81,7 +84,7 @@ You only need to redeploy slash commands when command definitions change.
 docker compose up -d --build
 ```
 
-Docker Compose starts Qdrant, starts Ollama, pulls the default embedding model, and runs the bot. No Qdrant or Ollama values are required in `.env` for the Compose setup.
+Docker Compose deploys slash commands, starts Qdrant, starts Ollama, pulls the default embedding model, and runs the bot. No Qdrant or Ollama values are required in `.env` for the Compose setup.
 
 ## Optional Config
 
@@ -173,10 +176,13 @@ Data rules:
 Reindex behavior:
 
 - The bot indexes `data/` on startup.
+- Use `/refresh` to rebuild the vector database while the bot is running.
+- Use `/upload` to save a `.txt` or `.pdf` attachment under `data/`; uploads refresh the vector database automatically.
+- `/upload` can autocomplete existing folders, and it can create a new typed folder path under `data/`.
 - Before indexing, it deletes old Qdrant points for the current `QDRANT_INDEX_ID`.
 - If the embedding vector size changes, the bot recreates the Qdrant collection before indexing.
 - Changing between embedding providers requires reindexing because vector dimensions and embedding spaces differ.
-- If you add, edit, or remove files while the bot is running, restart the bot so it rebuilds the Qdrant index.
+- If you add, edit, or remove files outside Discord while the bot is running, use `/refresh` so it rebuilds the Qdrant index.
 - You do not need to redeploy slash commands after changing `data/`.
 
 Retrieval behavior:
@@ -187,13 +193,13 @@ Retrieval behavior:
 
 Docker data behavior:
 
-- With Docker Compose, `./data` is mounted into the bot container as `/app/data:ro`.
+- With Docker Compose, `./data` is mounted into the bot container as `/app/data` so `/upload` can write files.
 - If you use `docker compose up -d --build`, local files in `data/` are available to the container.
 - If you run only the prebuilt Docker image without the Compose volume, rebuild the image after changing `data/`.
 
 ## Run With Docker Compose
 
-Use this when Docker Compose is installed. This starts Qdrant, Ollama, pulls the embedding model, and starts the bot.
+Use this when Docker Compose is installed. This deploys slash commands, starts Qdrant, starts Ollama, pulls the embedding model, and starts the bot.
 
 1. Start the stack:
 
@@ -201,7 +207,7 @@ Use this when Docker Compose is installed. This starts Qdrant, Ollama, pulls the
 docker compose up -d --build
 ```
 
-Inside Compose, the bot uses `QDRANT_URL=http://qdrant:6333` and `OLLAMA_BASE_URL=http://ollama:11434`. Compose uses local Ollama embeddings regardless of `EMBEDDING_PROVIDER` in `.env`. The `ollama-model` service pulls `nomic-embed-text` automatically before the bot starts.
+Inside Compose, the bot uses `QDRANT_URL=http://qdrant:6333` and `OLLAMA_BASE_URL=http://ollama:11434`. Compose uses local Ollama embeddings regardless of `EMBEDDING_PROVIDER` in `.env`. The bot container runs `npm run deploy` before `npm start`, so slash commands are registered before the bot starts. The `ollama-model` service pulls `nomic-embed-text` automatically before the bot starts.
 
 No host Ollama install is required for Docker Compose. The first run downloads the Qdrant image, Ollama image, Node dependencies, and the embedding model, so it can take several minutes and use extra disk space.
 

@@ -29,7 +29,11 @@ module.exports = {
     } catch (error) {
       console.error("Error answering RAG question:", error);
 
-      await interaction.editReply(getUserFacingError(error));
+      await interaction.editReply({
+        embeds: [
+          createResponseEmbed(getUserFacingError(error)).setTitle("Ask Failed"),
+        ],
+      });
     }
   },
 };

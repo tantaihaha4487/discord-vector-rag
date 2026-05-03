@@ -1,5 +1,7 @@
+const { EmbedBuilder } = require("discord.js");
+
 module.exports = async (interaction) => {
-  if (!interaction.isChatInputCommand()) return;
+  if (!interaction.isChatInputCommand() && !interaction.isAutocomplete()) return;
 
   const command = interaction.client.commands.get(interaction.commandName);
   try {
@@ -7,11 +9,29 @@ module.exports = async (interaction) => {
       return console.error(
         `No command matching ${interaction.commandName} was found.`,
       );
+
+    if (interaction.isAutocomplete()) {
+      if (typeof command.autocomplete !== "function") return;
+
+      await command.autocomplete(interaction);
+      return;
+    }
+
     await command.execute(interaction);
   } catch (error) {
     console.error(`Error executing command ${interaction.commandName}:`, error);
+
+    if (interaction.isAutocomplete()) {
+      await interaction.respond([]).catch(() => undefined);
+      return;
+    }
+
     const reply = {
-      content: "There was an error while executing this command!",
+      embeds: [
+        new EmbedBuilder()
+          .setTitle("Command Failed")
+          .setDescription("There was an error while executing this command."),
+      ],
       ephemeral: true,
     };
 
