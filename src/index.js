@@ -4,6 +4,10 @@ const { registerHandlers } = require("./utils/handler");
 require("dotenv").config();
 const { BOT_TOKEN } = process.env;
 
+if (!BOT_TOKEN) {
+  throw new Error("Missing BOT_TOKEN in .env.");
+}
+
 const client = new Client({
   intents: [GatewayIntentBits.Guilds],
 });

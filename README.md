@@ -19,18 +19,18 @@ Discord.js v14 bot with a `/ask` slash command backed by local knowledge files, 
 - `/ask` command for questions against local knowledge files
 - `/upload` command for adding `.txt` or `.pdf` files from Discord
 - `/refresh` command for rebuilding the Qdrant index without restarting
-- `/upload` and `/refresh` require Discord's Manage Server permission
+- `/upload` and `/refresh` are restricted by `discord.adminUserIds` in `config.yaml`
 - Supports `.txt` and `.pdf` files in `data/` and nested folders
 - Keyword-first retrieval for exact/factual questions
 - Qdrant semantic retrieval for general questions
-- Local Ollama embedding configuration
-- Optional remote embedding configuration using `AI_PROVIDER_<NAME>_*`
+- Local Ollama embedding configuration in `config.yaml`
+- Optional remote embedding configuration using `config.yaml` and provider API keys
 - Configurable fallback order for OpenAI-compatible chat providers
 - Docker Compose setup for the bot, Qdrant, and Ollama
 
 ## Quick Setup
 
-The basic setup needs Discord credentials and one chat provider API key. Fallback providers, Qdrant settings, and embedding settings are optional.
+The basic setup needs a Discord bot token in `.env`, Discord app IDs in `config.yaml`, and one chat provider API key. Fallback providers, Qdrant settings, and embedding settings are optional.
 
 1. Install dependencies:
 
@@ -44,18 +44,27 @@ npm install
 cp .env.example .env
 ```
 
-3. Fill in the required values:
+3. Fill in the required credentials in `.env`:
 
 ```env
 BOT_TOKEN=
-CLIENT_ID=
-GUILD_ID=
 AI_PROVIDER_OPENROUTER_API_KEY=
 ```
 
-Paste your real Discord credentials and provider API key after `=`. You only need one chat provider API key to start. Fallback providers are optional and can be added later.
+Paste your real Discord bot token and provider API key after `=`. You only need one chat provider API key to start. Fallback providers are optional and can be added later.
 
-4. Add knowledge files:
+4. Fill in Discord app IDs in `config.yaml`:
+
+```yaml
+discord:
+  clientId: "YOUR_CLIENT_ID"
+  guildId: "YOUR_GUILD_ID"
+  adminUserIds: []
+```
+
+Keep Discord IDs quoted. Leave `adminUserIds: []` to disable admin commands, or add your Discord user ID if you want to use `/upload` and `/refresh`.
+
+5. Add knowledge files:
 
 Place `.txt` or `.pdf` files in `data/` or folders inside `data/`.
 
@@ -70,7 +79,7 @@ data/
     faq.txt
 ```
 
-5. Deploy Discord slash commands:
+6. Deploy Discord slash commands:
 
 ```bash
 npm run deploy
@@ -78,7 +87,7 @@ npm run deploy
 
 You only need to redeploy slash commands when command definitions change.
 
-6. Start the bot and local services:
+7. Start the bot and local services:
 
 ```bash
 docker compose up -d --build
@@ -88,21 +97,51 @@ Docker Compose deploys slash commands, starts Qdrant, starts Ollama, pulls the d
 
 ## Optional Config
 
-Copy `.env.advanced.example` if you want a full reference for provider fallback, model tuning, Qdrant overrides, or remote embeddings.
+Use `.env` for credentials only. Use `config.yaml` for normal app settings such as Discord IDs, admin users, provider order, models, Qdrant, embeddings, and retrieval tuning.
+
+Copy `.env.advanced.example` if you want a full credential reference for all built-in providers.
+
+### Discord And Admins
+
+```yaml
+discord:
+  clientId: "YOUR_CLIENT_ID"
+  guildId: "YOUR_GUILD_ID"
+  adminUserIds:
+    - "YOUR_DISCORD_USER_ID"
+```
+
+`/ask` and `/ping` are public. `/upload` and `/refresh` only work for users listed in `discord.adminUserIds`.
+
+If `adminUserIds` is empty, `/upload` and `/refresh` are denied for everyone. Discord IDs must be quoted strings because they are larger than JavaScript's safe integer range.
 
 ### Fallback Chat Providers
 
-Fallback providers are not required. By default, the bot looks for OpenRouter only:
+Fallback providers are not required. By default, `config.yaml` uses OpenRouter only:
+
+```yaml
+chat:
+  providers:
+    - openrouter
+```
+
+Set the matching provider API key in `.env`:
 
 ```env
 AI_PROVIDER_OPENROUTER_API_KEY=
 ```
 
-To enable fallback, set `AI_PROVIDERS` in the order you want and add keys for the providers you want to use:
+To enable fallback, set `chat.providers` in the order you want and add keys for the providers you want to use:
+
+```yaml
+chat:
+  providers:
+    - openrouter
+    - nvidia
+    - openai
+```
 
 ```env
-AI_PROVIDERS=openrouter,nvidia,openai
-
 AI_PROVIDER_OPENROUTER_API_KEY=
 AI_PROVIDER_NVIDIA_API_KEY=
 AI_PROVIDER_OPENAI_API_KEY=
@@ -112,27 +151,38 @@ Providers without API keys are skipped.
 
 ### Qdrant
 
-The default local Qdrant config is:
+The default local Qdrant config in `config.yaml` is:
 
-```env
-QDRANT_URL=http://localhost:6333
-QDRANT_COLLECTION=discord_vector_rag
-QDRANT_INDEX_ID=discord-vector-rag
+```yaml
+qdrant:
+  url: http://localhost:6333
+  collection: discord_vector_rag
+  indexId: discord-vector-rag
 ```
 
-Only set these if you are not using the defaults. Docker Compose overrides `QDRANT_URL` to `http://qdrant:6333` inside the bot container.
+Only change these if you are not using the defaults. Docker Compose uses a runtime-only override for the Qdrant URL inside the bot container so `localhost` in `config.yaml` remains correct for local non-Docker runs.
+
+For remote Qdrant, keep the API key in `.env`:
+
+```env
+QDRANT_API_KEY=
+```
 
 ### Embeddings
 
-The default embedding provider is local Ollama:
+The default embedding provider in `config.yaml` is local Ollama:
 
-```env
-EMBEDDING_PROVIDER=ollama
-OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_EMBEDDING_MODEL=nomic-embed-text
+```yaml
+embeddings:
+  provider: ollama
+  ollama:
+    baseUrl: http://localhost:11434
+    model: nomic-embed-text
 ```
 
-Docker Compose always uses local Ollama embeddings and pulls `nomic-embed-text` automatically.
+Docker Compose uses local Ollama embeddings, uses a runtime-only override for the Ollama URL inside the bot container, and pulls `nomic-embed-text` automatically.
+
+If you change `embeddings.ollama.model` when using Docker Compose, also make sure that model exists in the Ollama container. You can set `OLLAMA_EMBEDDING_MODEL` before starting Compose so the `ollama-model` service pulls it, or pull it manually.
 
 If you run without Docker Compose, install Ollama and pull the default embedding model:
 
@@ -142,21 +192,29 @@ ollama pull nomic-embed-text
 
 Remote embeddings are optional. They reuse the same provider env format as chat providers:
 
-```env
-EMBEDDING_PROVIDER=openrouter
-AI_PROVIDER_OPENROUTER_API_KEY=
-AI_PROVIDER_OPENROUTER_EMBEDDING_MODEL=openai/text-embedding-3-small
+```yaml
+embeddings:
+  provider: openrouter
+
+providers:
+  openrouter:
+    embeddingModel: openai/text-embedding-3-small
 ```
 
-Do not change `EMBEDDING_PROVIDER` unless you specifically want remote embeddings.
+```env
+AI_PROVIDER_OPENROUTER_API_KEY=
+```
+
+Do not change `embeddings.provider` unless you specifically want remote embeddings.
 
 ### Retrieval Debug Logs
 
-```env
-RAG_DEBUG_RETRIEVAL=false
+```yaml
+retrieval:
+  debug: false
 ```
 
-Set `RAG_DEBUG_RETRIEVAL=true` to log retrieval mode, scores, source filenames, and chunk indexes without logging full chunk text.
+Set `retrieval.debug: true` to log retrieval mode, scores, source filenames, and chunk indexes without logging full chunk text.
 
 ## Knowledge Files
 
@@ -179,7 +237,7 @@ Reindex behavior:
 - Use `/refresh` to rebuild the vector database while the bot is running.
 - Use `/upload` to save a `.txt` or `.pdf` attachment under `data/`; uploads refresh the vector database automatically.
 - `/upload` can autocomplete existing folders, and it can create a new typed folder path under `data/`.
-- Before indexing, it deletes old Qdrant points for the current `QDRANT_INDEX_ID`.
+- Before indexing, it deletes old Qdrant points for the current `qdrant.indexId`.
 - If the embedding vector size changes, the bot recreates the Qdrant collection before indexing.
 - Changing between embedding providers requires reindexing because vector dimensions and embedding spaces differ.
 - If you add, edit, or remove files outside Discord while the bot is running, use `/refresh` so it rebuilds the Qdrant index.
@@ -207,7 +265,7 @@ Use this when Docker Compose is installed. This deploys slash commands, starts Q
 docker compose up -d --build
 ```
 
-Inside Compose, the bot uses `QDRANT_URL=http://qdrant:6333` and `OLLAMA_BASE_URL=http://ollama:11434`. Compose uses local Ollama embeddings regardless of `EMBEDDING_PROVIDER` in `.env`. The bot container runs `npm run deploy` before `npm start`, so slash commands are registered before the bot starts. The `ollama-model` service pulls `nomic-embed-text` automatically before the bot starts.
+Inside Compose, the bot uses runtime-only overrides for the Qdrant URL, Ollama URL, and embedding provider. Other non-secret settings still come from `config.yaml`. The bot container runs `npm run deploy` before `npm start`, so slash commands are registered before the bot starts. The `ollama-model` service pulls `nomic-embed-text` automatically before the bot starts.
 
 No host Ollama install is required for Docker Compose. The first run downloads the Qdrant image, Ollama image, Node dependencies, and the embedding model, so it can take several minutes and use extra disk space.
 
@@ -321,11 +379,11 @@ Examples:
 /ask question: Data Science and Software Innovation เรียนเกี่ยวกับอะไร
 ```
 
-On startup, the bot loads files from `data/` and its subfolders, chunks them, clears its own `QDRANT_INDEX_ID` points from Qdrant, and indexes the current chunks before searching.
+On startup, the bot loads files from `data/` and its subfolders, chunks them, clears its own `qdrant.indexId` points from Qdrant, and indexes the current chunks before searching.
 
 ## Provider Reference
 
-`AI_PROVIDERS` controls fallback order. You do not need to set it for the basic setup. Providers without an API key are skipped.
+`chat.providers` in `config.yaml` controls fallback order. You do not need to change it for the basic setup. Providers without an API key in `.env` are skipped.
 
 Built-in OpenAI-compatible providers:
 
@@ -337,24 +395,42 @@ Built-in OpenAI-compatible providers:
 - `deepinfra`
 - `fireworks`
 
-Each provider uses this env format:
+Provider settings live in `config.yaml`:
+
+```yaml
+chat:
+  providers:
+    - openrouter
+    - nvidia
+
+providers:
+  openrouter:
+    model: google/gemma-4-31b-it:free
+    baseUrl: https://openrouter.ai/api/v1
+    temperature: 0.2
+    embeddingModel: openai/text-embedding-3-small
+
+  nvidia:
+    model: deepseek-ai/deepseek-v4-flash
+    baseUrl: https://integrate.api.nvidia.com/v1
+    temperature: 1
+    topP: 0.95
+    maxTokens: 16384
+```
+
+Provider credentials stay in `.env`:
 
 ```env
 AI_PROVIDER_<NAME>_API_KEY=your_key
-AI_PROVIDER_<NAME>_MODEL=model_name
-AI_PROVIDER_<NAME>_BASE_URL=https://provider.example/v1
-AI_PROVIDER_<NAME>_TEMPERATURE=0.2
-AI_PROVIDER_<NAME>_TOP_P=0.95
-AI_PROVIDER_<NAME>_MAX_TOKENS=4096
-AI_PROVIDER_<NAME>_EMBEDDING_MODEL=text-embedding-3-small
 ```
 
-Custom OpenAI-compatible endpoints also work by adding a provider name to `AI_PROVIDERS` and setting `API_KEY`, `MODEL`, and `BASE_URL` for that name.
+Custom OpenAI-compatible endpoints also work by adding a provider name to `chat.providers`, adding its settings under `providers.<name>`, and setting `AI_PROVIDER_<NAME>_API_KEY` in `.env`.
 
 ## Structure
 
 ```text
 data/                      Local RAG knowledge files, scanned recursively
+config.yaml                Non-secret app, provider, retrieval, and admin config
 src/commands/ask.js        Discord slash command for RAG
 src/rag/                   RAG loading, Qdrant retrieval, LLM, and answer flow
 src/events/                Discord event handlers

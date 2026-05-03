@@ -1,0 +1,76 @@
+discord:
+  clientId: ""
+  guildId: ""
+  adminUserIds: []
+
+chat:
+  providers:
+    - openrouter
+
+providers:
+  openrouter:
+    name: OpenRouter
+    baseUrl: https://openrouter.ai/api/v1
+    model: google/gemma-4-31b-it:free
+    embeddingModel: openai/text-embedding-3-small
+    temperature: 0.2
+    defaultHeaders:
+      HTTP-Referer: http://localhost:3000
+      X-OpenRouter-Title: Discord RAG Bot
+
+  nvidia:
+    name: NVIDIA
+    baseUrl: https://integrate.api.nvidia.com/v1
+    model: deepseek-ai/deepseek-v4-flash
+    temperature: 1
+    topP: 0.95
+    maxTokens: 16384
+    reasoningEnabled: true
+    reasoningEffort: high
+
+  openai:
+    name: OpenAI
+    model: gpt-4o-mini
+    embeddingModel: text-embedding-3-small
+    temperature: 0.2
+
+  groq:
+    name: Groq
+    baseUrl: https://api.groq.com/openai/v1
+    model: llama-3.3-70b-versatile
+    temperature: 0.2
+
+  together:
+    name: Together AI
+    baseUrl: https://api.together.xyz/v1
+    model: meta-llama/Llama-3.3-70B-Instruct-Turbo
+    temperature: 0.2
+
+  deepinfra:
+    name: DeepInfra
+    baseUrl: https://api.deepinfra.com/v1/openai
+    model: meta-llama/Meta-Llama-3.1-70B-Instruct
+    temperature: 0.2
+
+  fireworks:
+    name: Fireworks
+    baseUrl: https://api.fireworks.ai/inference/v1
+    model: accounts/fireworks/models/llama-v3p1-70b-instruct
+    temperature: 0.2
+
+qdrant:
+  url: http://localhost:6333
+  collection: discord_vector_rag
+  indexId: discord-vector-rag
+
+embeddings:
+  provider: ollama
+  ollama:
+    baseUrl: http://localhost:11434
+    model: nomic-embed-text
+
+retrieval:
+  debug: false
+  chunkSize: 1200
+  chunkOverlap: 180
+  limit: 8
