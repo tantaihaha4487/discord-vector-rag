@@ -1,13 +1,26 @@
+const fs = require("node:fs");
+const path = require("node:path");
+const YAML = require("yaml");
+
+const PROJECT_ROOT = path.join(__dirname, "..", "..");
+const CONFIG_PATH = path.join(PROJECT_ROOT, "config.yaml");
+
 const DEFAULT_PROVIDER_IDS = ["openrouter"];
 const DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434";
 const DEFAULT_OLLAMA_EMBEDDING_MODEL = "nomic-embed-text";
+const DEFAULT_CHUNK_SIZE = 1200;
+const DEFAULT_CHUNK_OVERLAP = 180;
+const DEFAULT_RETRIEVAL_LIMIT = 8;
+const DEFAULT_EMBEDDING_PROVIDER_ID = "ollama";
+const DEFAULT_QDRANT_URL = "http://localhost:6333";
+const DEFAULT_QDRANT_COLLECTION = "discord_vector_rag";
+const DEFAULT_QDRANT_INDEX_ID = "discord-vector-rag";
 
 const BUILT_IN_PROVIDERS = {
   ollama: {
     name: "Ollama",
-    baseURL: getEnvValue("OLLAMA_BASE_URL") ?? DEFAULT_OLLAMA_BASE_URL,
-    embeddingModel:
-      getEnvValue("OLLAMA_EMBEDDING_MODEL") ?? DEFAULT_OLLAMA_EMBEDDING_MODEL,
+    baseURL: DEFAULT_OLLAMA_BASE_URL,
+    embeddingModel: DEFAULT_OLLAMA_EMBEDDING_MODEL,
   },
   openrouter: {
     name: "OpenRouter",
@@ -62,13 +75,7 @@ const BUILT_IN_PROVIDERS = {
   },
 };
 
-const CHUNK_SIZE = 1200;
-const CHUNK_OVERLAP = 180;
-const RETRIEVAL_LIMIT = 8;
-const DEFAULT_EMBEDDING_PROVIDER_ID = "ollama";
-const DEFAULT_QDRANT_URL = "http://localhost:6333";
-const DEFAULT_QDRANT_COLLECTION = "discord_vector_rag";
-const DEFAULT_QDRANT_INDEX_ID = "discord-vector-rag";
+let appConfig;
 
 function assertConfig() {
   const providers = getConfiguredProviders();
@@ -82,13 +89,13 @@ function assertConfig() {
 
   if (embeddingProvider.id !== "ollama" && !embeddingProvider.apiKey) {
     throw new Error(
-      `Missing embedding provider API key. Set ${getProviderEnvName(embeddingProvider.id, "API_KEY")} or use EMBEDDING_PROVIDER=ollama.`,
+      `Missing embedding provider API key. Set ${getProviderEnvName(embeddingProvider.id, "API_KEY")} in .env or use embeddings.provider: ollama in config.yaml.`,
     );
   }
 
   if (embeddingProvider.id !== "ollama" && !embeddingProvider.embeddingModel) {
     throw new Error(
-      `Missing embedding model for ${embeddingProvider.name}. Set ${getProviderEnvName(embeddingProvider.id, "EMBEDDING_MODEL")} or use EMBEDDING_PROVIDER=ollama.`,
+      `Missing embedding model for ${embeddingProvider.name}. Set providers.${embeddingProvider.id}.embeddingModel in config.yaml or use embeddings.provider: ollama.`,
     );
   }
 }
@@ -100,65 +107,185 @@ function getConfiguredProviders() {
 }
 
 function getProviderIds() {
-  return (getEnvValue("AI_PROVIDERS") ?? DEFAULT_PROVIDER_IDS.join(","))
-    .split(",")
-    .map((provider) => provider.trim().toLowerCase())
-    .filter(Boolean);
+  const chat = getObject(getAppConfig().chat, "chat");
+  const providers = getStringList(chat.providers, "chat.providers", {
+    lowercase: true,
+  });
+
+  return providers.length ? providers : DEFAULT_PROVIDER_IDS;
 }
 
 function getProviderConfig(id) {
-  const builtIn = BUILT_IN_PROVIDERS[id] ?? {};
+  const normalizedId = id.trim().toLowerCase();
+  const builtIn = BUILT_IN_PROVIDERS[normalizedId] ?? {};
+  const provider = getYamlProvider(normalizedId);
+  const pathPrefix = `providers.${normalizedId}`;
+  const defaultHeaders = getStringMap(
+    provider.defaultHeaders,
+    `${pathPrefix}.defaultHeaders`,
+  );
 
   return {
-    id,
-    name: getProviderEnv(id, "NAME") ?? builtIn.name ?? formatProviderName(id),
-    apiKey: getProviderEnv(id, "API_KEY"),
-    model: getProviderEnv(id, "MODEL") ?? builtIn.model,
+    id: normalizedId,
+    name:
+      getString(provider.name, `${pathPrefix}.name`) ??
+      builtIn.name ??
+      formatProviderName(normalizedId),
+    apiKey: getProviderEnv(normalizedId, "API_KEY"),
+    model: getString(provider.model, `${pathPrefix}.model`) ?? builtIn.model,
     embeddingModel:
-      getProviderEnv(id, "EMBEDDING_MODEL") ?? builtIn.embeddingModel,
-    baseURL: getProviderEnv(id, "BASE_URL") ?? builtIn.baseURL,
-    temperature: getNumberProviderEnv(id, "TEMPERATURE", builtIn.temperature),
-    topP: getNumberProviderEnv(id, "TOP_P", builtIn.topP),
-    maxTokens: getNumberProviderEnv(id, "MAX_TOKENS", builtIn.maxTokens),
-    defaultHeaders: builtIn.defaultHeaders,
-    reasoningEnabled: getBooleanProviderEnv(
-      id,
-      "REASONING_ENABLED",
+      getString(provider.embeddingModel, `${pathPrefix}.embeddingModel`) ??
+      builtIn.embeddingModel,
+    baseURL:
+      getString(provider.baseUrl, `${pathPrefix}.baseUrl`) ??
+      getString(provider.baseURL, `${pathPrefix}.baseURL`) ??
+      builtIn.baseURL,
+    temperature: getNumber(
+      provider.temperature,
+      builtIn.temperature,
+      `${pathPrefix}.temperature`,
+    ),
+    topP: getNumber(provider.topP, builtIn.topP, `${pathPrefix}.topP`),
+    maxTokens: getNumber(
+      provider.maxTokens,
+      builtIn.maxTokens,
+      `${pathPrefix}.maxTokens`,
+    ),
+    defaultHeaders: defaultHeaders ?? builtIn.defaultHeaders,
+    reasoningEnabled: getBoolean(
+      provider.reasoningEnabled,
       builtIn.reasoningEnabled,
+      `${pathPrefix}.reasoningEnabled`,
     ),
     reasoningEffort:
-      getProviderEnv(id, "REASONING_EFFORT") ?? builtIn.reasoningEffort,
+      getString(provider.reasoningEffort, `${pathPrefix}.reasoningEffort`) ??
+      builtIn.reasoningEffort,
   };
 }
 
 function getEmbeddingProviderConfig() {
+  const embeddings = getObject(getAppConfig().embeddings, "embeddings");
   const id = (
-    getEnvValue("EMBEDDING_PROVIDER") ?? DEFAULT_EMBEDDING_PROVIDER_ID
-  ).trim().toLowerCase();
+    getEnvValue("RUNTIME_EMBEDDING_PROVIDER") ??
+    getString(embeddings.provider, "embeddings.provider") ??
+    DEFAULT_EMBEDDING_PROVIDER_ID
+  )
+    .trim()
+    .toLowerCase();
   const provider = getProviderConfig(id);
-  const embeddingModel =
-    getProviderEnv(id, "EMBEDDING_MODEL") ?? provider.embeddingModel;
+
+  if (id !== "ollama") return provider;
+
+  const ollama = getObject(embeddings.ollama, "embeddings.ollama");
 
   return {
     ...provider,
+    baseURL:
+      getEnvValue("RUNTIME_OLLAMA_BASE_URL") ??
+      getString(ollama.baseUrl, "embeddings.ollama.baseUrl") ??
+      provider.baseURL ??
+      DEFAULT_OLLAMA_BASE_URL,
     embeddingModel:
-      id === "ollama"
-        ? embeddingModel ?? DEFAULT_OLLAMA_EMBEDDING_MODEL
-        : embeddingModel,
+      getString(ollama.model, "embeddings.ollama.model") ??
+      getString(ollama.embeddingModel, "embeddings.ollama.embeddingModel") ??
+      provider.embeddingModel ??
+      DEFAULT_OLLAMA_EMBEDDING_MODEL,
   };
 }
 
 function getQdrantConfig() {
+  const qdrant = getObject(getAppConfig().qdrant, "qdrant");
+
   return {
-    url: getEnvValue("QDRANT_URL") ?? DEFAULT_QDRANT_URL,
+    url:
+      getEnvValue("RUNTIME_QDRANT_URL") ??
+      getString(qdrant.url, "qdrant.url") ??
+      DEFAULT_QDRANT_URL,
     apiKey: getEnvValue("QDRANT_API_KEY"),
-    collectionName: getEnvValue("QDRANT_COLLECTION") ?? DEFAULT_QDRANT_COLLECTION,
-    indexId: getEnvValue("QDRANT_INDEX_ID") ?? DEFAULT_QDRANT_INDEX_ID,
+    collectionName:
+      getString(qdrant.collection, "qdrant.collection") ??
+      DEFAULT_QDRANT_COLLECTION,
+    indexId:
+      getString(qdrant.indexId, "qdrant.indexId") ??
+      DEFAULT_QDRANT_INDEX_ID,
   };
 }
 
+function getDiscordConfig() {
+  const discord = getObject(getAppConfig().discord, "discord");
+
+  return {
+    clientId: getDiscordId(discord.clientId, "discord.clientId"),
+    guildId: getDiscordId(discord.guildId, "discord.guildId"),
+    adminUserIds: getDiscordIdList(
+      discord.adminUserIds,
+      "discord.adminUserIds",
+    ),
+  };
+}
+
+function getRetrievalConfig() {
+  const retrieval = getObject(getAppConfig().retrieval, "retrieval");
+
+  return {
+    chunkSize: getInteger(
+      retrieval.chunkSize,
+      DEFAULT_CHUNK_SIZE,
+      "retrieval.chunkSize",
+      { min: 1 },
+    ),
+    chunkOverlap: getInteger(
+      retrieval.chunkOverlap,
+      DEFAULT_CHUNK_OVERLAP,
+      "retrieval.chunkOverlap",
+      { min: 0 },
+    ),
+    limit: getInteger(
+      retrieval.limit,
+      DEFAULT_RETRIEVAL_LIMIT,
+      "retrieval.limit",
+      { min: 1 },
+    ),
+    debug: getBoolean(retrieval.debug, false, "retrieval.debug"),
+  };
+}
+
+function isAdminUser(userId) {
+  return getDiscordConfig().adminUserIds.includes(userId);
+}
+
 function isRetrievalDebugEnabled() {
-  return getEnvValue("RAG_DEBUG_RETRIEVAL") === "true";
+  return getRetrievalConfig().debug;
+}
+
+function getYamlProvider(id) {
+  const providers = getObject(getAppConfig().providers, "providers");
+  const provider = providers[id];
+
+  return getObject(provider, `providers.${id}`);
+}
+
+function getAppConfig() {
+  if (appConfig) return appConfig;
+
+  if (!fs.existsSync(CONFIG_PATH)) {
+    appConfig = {};
+    return appConfig;
+  }
+
+  try {
+    appConfig = YAML.parse(fs.readFileSync(CONFIG_PATH, "utf8")) ?? {};
+  } catch (error) {
+    throw new Error(`Could not parse config.yaml: ${error.message}`, {
+      cause: error,
+    });
+  }
+
+  if (!isPlainObject(appConfig)) {
+    throw new Error("config.yaml must contain a YAML object.");
+  }
+
+  return appConfig;
 }
 
 function getProviderEnv(id, key) {
@@ -175,25 +302,117 @@ function getEnvValue(name) {
   return value || undefined;
 }
 
-function getNumberProviderEnv(id, key, fallback) {
-  const value = getProviderEnv(id, key);
-  if (value === undefined) return fallback;
+function getObject(value, configPath) {
+  if (value === undefined || value === null) return {};
+
+  if (!isPlainObject(value)) {
+    throw new Error(`${configPath} in config.yaml must be an object.`);
+  }
+
+  return value;
+}
+
+function getString(value, configPath) {
+  if (value === undefined || value === null || value === "") return undefined;
+
+  if (typeof value !== "string") {
+    throw new Error(`${configPath} in config.yaml must be a string.`);
+  }
+
+  return value.trim() || undefined;
+}
+
+function getStringList(value, configPath, { lowercase = false } = {}) {
+  if (value === undefined || value === null) return [];
+
+  if (!Array.isArray(value)) {
+    throw new Error(`${configPath} in config.yaml must be a list.`);
+  }
+
+  return value
+    .map((item) => {
+      const string = getString(item, configPath);
+
+      return lowercase ? string?.toLowerCase() : string;
+    })
+    .filter(Boolean);
+}
+
+function getDiscordId(value, configPath) {
+  if (value === undefined || value === null || value === "") return undefined;
+
+  if (typeof value !== "string") {
+    throw new Error(`${configPath} in config.yaml must be a quoted string.`);
+  }
+
+  return value.trim() || undefined;
+}
+
+function getDiscordIdList(value, configPath) {
+  if (value === undefined || value === null) return [];
+
+  if (!Array.isArray(value)) {
+    throw new Error(`${configPath} in config.yaml must be a list.`);
+  }
+
+  return value
+    .map((item) => getDiscordId(item, configPath))
+    .filter(Boolean);
+}
+
+function getStringMap(value, configPath) {
+  if (value === undefined || value === null) return undefined;
+
+  const object = getObject(value, configPath);
+  const entries = Object.entries(object)
+    .map(([key, item]) => [key, getString(item, `${configPath}.${key}`)])
+    .filter(([, item]) => item !== undefined);
+
+  return entries.length ? Object.fromEntries(entries) : undefined;
+}
+
+function getNumber(value, fallback, configPath) {
+  if (value === undefined || value === null || value === "") return fallback;
+
+  if (typeof value !== "number" && typeof value !== "string") {
+    throw new Error(`${configPath} in config.yaml must be a number.`);
+  }
 
   const number = Number(value);
-  if (Number.isNaN(number)) {
+
+  if (!Number.isFinite(number)) {
+    throw new Error(`${configPath} in config.yaml must be a finite number.`);
+  }
+
+  return number;
+}
+
+function getInteger(value, fallback, configPath, { min }) {
+  const number = getNumber(value, fallback, configPath);
+
+  if (!Number.isInteger(number) || number < min) {
     throw new Error(
-      `Invalid number for AI_PROVIDER_${formatEnvProviderId(id)}_${key}.`,
+      `${configPath} in config.yaml must be an integer greater than or equal to ${min}.`,
     );
   }
 
   return number;
 }
 
-function getBooleanProviderEnv(id, key, fallback) {
-  const value = getProviderEnv(id, key);
-  if (value === undefined) return fallback;
+function getBoolean(value, fallback, configPath) {
+  if (value === undefined || value === null || value === "") return fallback;
+  if (typeof value === "boolean") return value;
 
-  return value !== "false";
+  if (typeof value === "string") {
+    if (value === "true") return true;
+    if (value === "false") return false;
+  }
+
+  throw new Error(`${configPath} in config.yaml must be true or false.`);
+}
+
+function isPlainObject(value) {
+  return Object.prototype.toString.call(value) === "[object Object]";
 }
 
 function formatEnvProviderId(id) {
@@ -208,13 +427,23 @@ function formatProviderName(id) {
     .join(" ");
 }
 
+const {
+  chunkSize: CHUNK_SIZE,
+  chunkOverlap: CHUNK_OVERLAP,
+  limit: RETRIEVAL_LIMIT,
+} = getRetrievalConfig();
+
 module.exports = {
   CHUNK_SIZE,
   CHUNK_OVERLAP,
   RETRIEVAL_LIMIT,
   assertConfig,
   getConfiguredProviders,
+  getDiscordConfig,
   getEmbeddingProviderConfig,
+  getProviderConfig,
   getQdrantConfig,
+  getRetrievalConfig,
+  isAdminUser,
   isRetrievalDebugEnabled,
 };

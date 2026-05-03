@@ -85,7 +85,7 @@ function getUserFacingError(error) {
   }
 
   if (error?.status === 429 || error?.lc_error_code === "MODEL_RATE_LIMIT") {
-    return "AI provider rate limit hit. Retry later or change AI_PROVIDERS/model configuration.";
+    return "AI provider rate limit hit. Retry later or change provider settings in config.yaml.";
   }
 
   if (error?.message?.includes("Ollama")) {

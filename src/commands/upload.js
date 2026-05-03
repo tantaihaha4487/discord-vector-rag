@@ -1,5 +1,5 @@
 const { SlashCommandBuilder } = require("@discordjs/builders");
-const { EmbedBuilder, PermissionFlagsBits } = require("discord.js");
+const { EmbedBuilder } = require("discord.js");
 const { mkdir, writeFile } = require("node:fs/promises");
 const path = require("node:path");
 const {
@@ -7,6 +7,7 @@ const {
   listDataFolders,
   supportedExtensions,
 } = require("../rag/data-loader");
+const { isAdminUser } = require("../rag/config");
 const { refreshKnowledgeVectorStore } = require("../rag/vector-store");
 
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
@@ -16,7 +17,6 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName("upload")
     .setDescription("Upload a knowledge file and refresh the RAG index")
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .addAttachmentOption((option) =>
       option
         .setName("file")
@@ -31,6 +31,11 @@ module.exports = {
     ),
 
   async autocomplete(interaction) {
+    if (!isAdminUser(interaction.user.id)) {
+      await interaction.respond([]);
+      return;
+    }
+
     const focused = interaction.options.getFocused().trim().toLowerCase();
     const folders = [".", ...(await listDataFolders())];
     const choices = folders
@@ -45,6 +50,11 @@ module.exports = {
   },
 
   async execute(interaction) {
+    if (!isAdminUser(interaction.user.id)) {
+      await replyNotAllowed(interaction);
+      return;
+    }
+
     const attachment = interaction.options.getAttachment("file", true);
     const folder = interaction.options.getString("folder") ?? "";
 
@@ -189,6 +199,13 @@ function createRefreshFailedEmbed(relativePath, error) {
 
 function createErrorEmbed(error) {
   return createEmbed("Upload Failed", getUserFacingError(error));
+}
+
+async function replyNotAllowed(interaction) {
+  await interaction.reply({
+    content: "Only users listed in `discord.adminUserIds` can use this command.",
+    ephemeral: true,
+  });
 }
 
 function createEmbed(title, description) {
