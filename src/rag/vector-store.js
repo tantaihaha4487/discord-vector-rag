@@ -27,28 +27,35 @@ async function getKnowledgeVectorStore() {
 }
 
 async function refreshKnowledgeVectorStore() {
-  if (refreshPromise) {
-    const knowledgeBase = await refreshPromise;
+  const queuedAfter = refreshPromise ?? vectorStorePromise;
+  let activePromise;
 
-    return getIndexStats(knowledgeBase);
-  }
+  const currentPromise = (async () => {
+    await queuedAfter?.catch(() => undefined);
 
-  const previousPromise = vectorStorePromise;
-  const currentPromise = buildKnowledgeVectorStore().catch((error) => {
-    vectorStorePromise = previousPromise;
-    throw error;
-  });
+    const previousPromise = vectorStorePromise;
 
-  const activePromise = currentPromise.finally(() => {
+    try {
+      const knowledgeBase = await buildKnowledgeVectorStore();
+
+      vectorStorePromise = Promise.resolve(knowledgeBase);
+
+      return knowledgeBase;
+    } catch (error) {
+      vectorStorePromise = previousPromise;
+      throw error;
+    }
+  })();
+
+  activePromise = currentPromise.finally(() => {
     if (refreshPromise === activePromise) {
       refreshPromise = undefined;
     }
   });
 
   refreshPromise = activePromise;
-  vectorStorePromise = activePromise;
 
-  const knowledgeBase = await refreshPromise;
+  const knowledgeBase = await activePromise;
 
   return getIndexStats(knowledgeBase);
 }
