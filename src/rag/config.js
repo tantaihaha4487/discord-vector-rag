@@ -15,6 +15,11 @@ const DEFAULT_EMBEDDING_PROVIDER_ID = "ollama";
 const DEFAULT_QDRANT_URL = "http://localhost:6333";
 const DEFAULT_QDRANT_COLLECTION = "discord_vector_rag";
 const DEFAULT_QDRANT_INDEX_ID = "discord-vector-rag";
+const DEFAULT_IMAGE_TEXT_PROVIDER_ID = "openrouter";
+const DEFAULT_IMAGE_TEXT_MODEL = "google/gemini-2.5-flash";
+const DEFAULT_IMAGE_TEXT_CACHE_DIR = ".cache/image-text";
+const DEFAULT_IMAGE_TEXT_MAX_BYTES = 15 * 1024 * 1024;
+const DEFAULT_IMAGE_TEXT_PROMPT_VERSION = "v1";
 
 const BUILT_IN_PROVIDERS = {
   ollama: {
@@ -211,6 +216,37 @@ function getQdrantConfig() {
   };
 }
 
+function getImageTextConfig() {
+  const imageText = getObject(getAppConfig().imageText, "imageText");
+  const providerId = (
+    getString(imageText.provider, "imageText.provider") ??
+    DEFAULT_IMAGE_TEXT_PROVIDER_ID
+  )
+    .trim()
+    .toLowerCase();
+  const provider = getProviderConfig(providerId);
+  const cacheDir =
+    getString(imageText.cacheDir, "imageText.cacheDir") ??
+    DEFAULT_IMAGE_TEXT_CACHE_DIR;
+
+  return {
+    ...provider,
+    apiKeyEnvName: getProviderEnvName(providerId, "API_KEY"),
+    cacheDir: resolveProjectPath(cacheDir),
+    maxBytes: getInteger(
+      imageText.maxBytes,
+      DEFAULT_IMAGE_TEXT_MAX_BYTES,
+      "imageText.maxBytes",
+      { min: 1 },
+    ),
+    model:
+      getString(imageText.model, "imageText.model") ?? DEFAULT_IMAGE_TEXT_MODEL,
+    promptVersion:
+      getString(imageText.promptVersion, "imageText.promptVersion") ??
+      DEFAULT_IMAGE_TEXT_PROMPT_VERSION,
+  };
+}
+
 function getDiscordConfig() {
   const discord = getObject(getAppConfig().discord, "discord");
 
@@ -300,6 +336,10 @@ function getEnvValue(name) {
   const value = process.env[name]?.trim();
 
   return value || undefined;
+}
+
+function resolveProjectPath(value) {
+  return path.isAbsolute(value) ? value : path.join(PROJECT_ROOT, value);
 }
 
 function getObject(value, configPath) {
@@ -441,6 +481,7 @@ module.exports = {
   getConfiguredProviders,
   getDiscordConfig,
   getEmbeddingProviderConfig,
+  getImageTextConfig,
   getProviderConfig,
   getQdrantConfig,
   getRetrievalConfig,

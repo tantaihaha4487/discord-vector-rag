@@ -4,9 +4,19 @@ const { Document } = require("@langchain/core/documents");
 const { RecursiveCharacterTextSplitter } = require("@langchain/textsplitters");
 const { PDFParse } = require("pdf-parse");
 const { CHUNK_OVERLAP, CHUNK_SIZE } = require("./config");
+const {
+  extractImageText,
+  isImageExtension,
+  supportedImageExtensions,
+} = require("./image-text");
 
 const dataDir = path.join(__dirname, "..", "..", "data");
-const supportedExtensions = new Set([".txt", ".pdf"]);
+const textExtensions = new Set([".txt", ".pdf"]);
+const supportedExtensions = new Set([
+  ...textExtensions,
+  ...supportedImageExtensions,
+]);
+const supportedFileTypes = [...supportedExtensions].join(", ");
 
 async function loadKnowledgeBase() {
   const documents = await loadDocuments();
@@ -34,14 +44,16 @@ async function loadDocuments() {
   );
 
   if (supportedFiles.length === 0) {
-    throw new Error("No .txt or .pdf files found in data/");
+    throw new Error("No supported knowledge files found in data/");
   }
 
   return Promise.all(
     supportedFiles.map(async ({ filePath, relativePath }) => {
+      const content = await loadFileContent(filePath, relativePath);
+
       return new Document({
-        pageContent: await loadFileText(filePath),
-        metadata: { source: relativePath },
+        pageContent: content.text,
+        metadata: { source: relativePath, ...content.metadata },
       });
     }),
   );
@@ -105,9 +117,23 @@ async function loadFileText(filePath) {
   }
 }
 
+async function loadFileContent(filePath, relativePath) {
+  const extension = path.extname(filePath).toLowerCase();
+
+  if (isImageExtension(extension)) {
+    return extractImageText(filePath, relativePath);
+  }
+
+  return {
+    text: await loadFileText(filePath),
+    metadata: {},
+  };
+}
+
 module.exports = {
   dataDir,
   listDataFolders,
   loadKnowledgeBase,
   supportedExtensions,
+  supportedFileTypes,
 };

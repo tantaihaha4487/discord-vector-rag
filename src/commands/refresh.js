@@ -57,7 +57,7 @@ function createErrorEmbed(error) {
 
 async function replyNotAllowed(interaction) {
   await interaction.reply({
-    content: "Only users listed in `discord.adminUserIds` can use this command.",
+    content: `Only users listed in \`discord.adminUserIds\` can use this command. Your user ID is \`${interaction.user.id}\`.`,
     ephemeral: true,
   });
 }
