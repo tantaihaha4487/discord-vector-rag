@@ -1,6 +1,6 @@
 const { SlashCommandBuilder } = require("@discordjs/builders");
 const { EmbedBuilder } = require("discord.js");
-const { isAdminUser } = require("../rag/config");
+const { canUseAdminCommand } = require("../rag/config");
 const { refreshKnowledgeVectorStore } = require("../rag/vector-store");
 
 module.exports = {
@@ -9,7 +9,7 @@ module.exports = {
     .setDescription("Refresh the RAG vector database from data/"),
 
   async execute(interaction) {
-    if (!isAdminUser(interaction.user.id)) {
+    if (!canUseAdminCommand(interaction)) {
       await replyNotAllowed(interaction);
       return;
     }
@@ -57,7 +57,7 @@ function createErrorEmbed(error) {
 
 async function replyNotAllowed(interaction) {
   await interaction.reply({
-    content: "Only users listed in `discord.adminUserIds` can use this command.",
+    content: `Only users listed in \`discord.adminUserIds\` or members with \`discord.moderatorRoleIds\` can use this command. Your user ID is \`${interaction.user.id}\`.`,
     ephemeral: true,
   });
 }

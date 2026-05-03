@@ -13,7 +13,10 @@ if (!BOT_TOKEN) {
 }
 
 if (!clientId || !guildId) {
-  throw new Error("Set discord.clientId and discord.guildId in config.yaml.");
+  console.warn(
+    "Skipping slash command deploy: set discord.clientId and discord.guildId in config.yaml to deploy commands.",
+  );
+  process.exit(0);
 }
 
 const commands = [];

@@ -1,6 +1,6 @@
 # Discord Vector RAG Bot
 
-Discord.js v14 bot with a `/ask` slash command backed by local knowledge files, keyword routing, Ollama local embeddings, Qdrant vector search, and configurable OpenAI-compatible chat providers.
+Discord.js v14 bot with a `/ask` slash command backed by local knowledge files, image text extraction, keyword routing, Ollama local embeddings, Qdrant vector search, and configurable OpenAI-compatible chat providers.
 
 ## Tech Stack
 
@@ -9,6 +9,7 @@ Discord.js v14 bot with a `/ask` slash command backed by local knowledge files, 
 - LangChain text splitters and OpenAI-compatible chat clients
 - Ollama local embeddings by default
 - Optional remote embeddings through OpenAI-compatible providers
+- OpenRouter image text extraction with Gemini-compatible vision models
 - Qdrant vector database
 - Docker and Docker Compose
 - `pdf-parse` for PDF knowledge files
@@ -17,10 +18,12 @@ Discord.js v14 bot with a `/ask` slash command backed by local knowledge files, 
 
 - Slash command loader from the original Discord.js template
 - `/ask` command for questions against local knowledge files
-- `/upload` command for adding `.txt` or `.pdf` files from Discord
+- `/upload` command for adding `.txt`, `.pdf`, or image files from Discord
 - `/refresh` command for rebuilding the Qdrant index without restarting
-- `/upload` and `/refresh` are restricted by `discord.adminUserIds` in `config.yaml`
-- Supports `.txt` and `.pdf` files in `data/` and nested folders
+- `/reload` command for reloading `config.yaml` without restarting
+- `/upload`, `/refresh`, and `/reload` are restricted by `discord.adminUserIds` and `discord.moderatorRoleIds` in `config.yaml`
+- Supports `.txt`, `.pdf`, `.png`, `.jpg`, `.jpeg`, `.webp`, `.heic`, and `.heif` files in `data/` and nested folders
+- Caches extracted image text so unchanged images do not call the vision model again
 - Keyword-first retrieval for exact/factual questions
 - Qdrant semantic retrieval for general questions
 - Local Ollama embedding configuration in `config.yaml`
@@ -60,13 +63,14 @@ discord:
   clientId: "YOUR_CLIENT_ID"
   guildId: "YOUR_GUILD_ID"
   adminUserIds: []
+  moderatorRoleIds: []
 ```
 
-Keep Discord IDs quoted. Leave `adminUserIds: []` to disable admin commands, or add your Discord user ID if you want to use `/upload` and `/refresh`.
+Keep Discord IDs quoted. Leave both access lists empty to disable admin commands, or add your Discord user ID or moderator role IDs if you want to use `/upload`, `/refresh`, and `/reload`.
 
 5. Add knowledge files:
 
-Place `.txt` or `.pdf` files in `data/` or folders inside `data/`.
+Place `.txt`, `.pdf`, or supported image files in `data/` or folders inside `data/`.
 
 Example:
 
@@ -77,6 +81,8 @@ data/
     handbook.pdf
   faq/
     faq.txt
+  posters/
+    event.jpg
 ```
 
 6. Deploy Discord slash commands:
@@ -85,7 +91,7 @@ data/
 npm run deploy
 ```
 
-You only need to redeploy slash commands when command definitions change.
+You only need to redeploy slash commands when command definitions change. If `discord.clientId` or `discord.guildId` is empty, deploy logs a warning and skips command registration.
 
 7. Start the bot and local services:
 
@@ -109,11 +115,19 @@ discord:
   guildId: "YOUR_GUILD_ID"
   adminUserIds:
     - "YOUR_DISCORD_USER_ID"
+  moderatorRoleIds:
+    - "YOUR_MODERATOR_ROLE_ID"
 ```
 
-`/ask` and `/ping` are public. `/upload` and `/refresh` only work for users listed in `discord.adminUserIds`.
+`/ask` and `/ping` are public. `/upload`, `/refresh`, and `/reload` only work for users listed in `discord.adminUserIds` or members with a role listed in `discord.moderatorRoleIds`.
 
-If `adminUserIds` is empty, `/upload` and `/refresh` are denied for everyone. Discord IDs must be quoted strings because they are larger than JavaScript's safe integer range.
+If both access lists are empty, `/upload`, `/refresh`, and `/reload` are denied for everyone. Discord IDs must be quoted strings because they are larger than JavaScript's safe integer range.
+
+### Runtime Config Reload
+
+Use `/reload` after editing `config.yaml` to apply normal config changes without restarting the bot. It reloads admin users, moderator roles, provider settings, retrieval settings, Qdrant settings, and image text settings.
+
+`/reload` does not reload `.env`; changing API keys or `BOT_TOKEN` still requires restarting the bot process. If reload changes embedding, Qdrant, chunking, or image text settings, run `/refresh` afterward so the vector index matches the new config.
 
 ### Fallback Chat Providers
 
@@ -207,6 +221,29 @@ AI_PROVIDER_OPENROUTER_API_KEY=
 
 Do not change `embeddings.provider` unless you specifically want remote embeddings.
 
+### Image Text Extraction
+
+Image files are converted to searchable text during indexing. By default, this uses OpenRouter with a Gemini vision model:
+
+```yaml
+imageText:
+  provider: openrouter
+  model: google/gemini-2.5-flash
+  cacheDir: .cache/image-text
+  maxBytes: 15728640
+  promptVersion: v1
+```
+
+Set the matching provider key in `.env`:
+
+```env
+AI_PROVIDER_OPENROUTER_API_KEY=
+```
+
+The extracted text is cached under `.cache/image-text/` using the image hash, provider, model, and prompt version. Change `imageText.promptVersion` when you want to force re-extraction after changing extraction behavior.
+
+Images are sent to the configured image text provider during extraction. Do not add private images unless that is acceptable for your provider account and data policy.
+
 ### Retrieval Debug Logs
 
 ```yaml
@@ -222,6 +259,7 @@ Supported file types:
 
 - `.txt` files are read as UTF-8 text.
 - `.pdf` files are parsed with `pdf-parse`.
+- `.png`, `.jpg`, `.jpeg`, `.webp`, `.heic`, and `.heif` files are sent to `imageText.provider` for text extraction.
 
 Data rules:
 
@@ -230,17 +268,19 @@ Data rules:
 - Keep filenames descriptive because filenames are shown in Discord as `Sources`.
 - Do not put secrets, API keys, or private credentials in knowledge files.
 - Large PDFs work, but they create more chunks and may appear more often in retrieval results.
+- Image files must fit under `imageText.maxBytes` for inline extraction.
 
 Reindex behavior:
 
 - The bot indexes `data/` on startup.
 - Use `/refresh` to rebuild the vector database while the bot is running.
-- Use `/upload` to save a `.txt` or `.pdf` attachment under `data/`; uploads refresh the vector database automatically.
+- Use `/upload` to save a `.txt`, `.pdf`, or image attachment under `data/`; uploads refresh the vector database automatically.
 - `/upload` can autocomplete existing folders, and it can create a new typed folder path under `data/`.
 - Before indexing, it deletes old Qdrant points for the current `qdrant.indexId`.
 - If the embedding vector size changes, the bot recreates the Qdrant collection before indexing.
 - Changing between embedding providers requires reindexing because vector dimensions and embedding spaces differ.
 - If you add, edit, or remove files outside Discord while the bot is running, use `/refresh` so it rebuilds the Qdrant index.
+- Unchanged image files reuse cached extracted text from `.cache/image-text/`.
 - You do not need to redeploy slash commands after changing `data/`.
 
 Retrieval behavior:
@@ -252,6 +292,8 @@ Retrieval behavior:
 Docker data behavior:
 
 - With Docker Compose, `./data` is mounted into the bot container as `/app/data` so `/upload` can write files.
+- With Docker Compose, `./.cache` is mounted into the bot container as `/app/.cache` so image text extraction cache survives rebuilds.
+- With Docker Compose, `./config.yaml` is mounted into the bot container as `/app/config.yaml`; restart the bot after changing config.
 - If you use `docker compose up -d --build`, local files in `data/` are available to the container.
 - If you run only the prebuilt Docker image without the Compose volume, rebuild the image after changing `data/`.
 
@@ -265,7 +307,7 @@ Use this when Docker Compose is installed. This deploys slash commands, starts Q
 docker compose up -d --build
 ```
 
-Inside Compose, the bot uses runtime-only overrides for the Qdrant URL, Ollama URL, and embedding provider. Other non-secret settings still come from `config.yaml`. The bot container runs `npm run deploy` before `npm start`, so slash commands are registered before the bot starts. The `ollama-model` service pulls `nomic-embed-text` automatically before the bot starts.
+Inside Compose, the bot uses runtime-only overrides for the Qdrant URL, Ollama URL, and embedding provider. Other non-secret settings still come from `config.yaml`. The bot container runs `npm run deploy` before `npm start`, so slash commands are registered before the bot starts when Discord app IDs are configured. If `discord.clientId` or `discord.guildId` is empty, deploy logs a warning and the bot still starts. The `ollama-model` service pulls `nomic-embed-text` automatically before the bot starts.
 
 No host Ollama install is required for Docker Compose. The first run downloads the Qdrant image, Ollama image, Node dependencies, and the embedding model, so it can take several minutes and use extra disk space.
 
@@ -430,6 +472,7 @@ Custom OpenAI-compatible endpoints also work by adding a provider name to `chat.
 
 ```text
 data/                      Local RAG knowledge files, scanned recursively
+.cache/image-text/         Cached text extracted from image knowledge files
 config.yaml                Non-secret app, provider, retrieval, and admin config
 src/commands/ask.js        Discord slash command for RAG
 src/rag/                   RAG loading, Qdrant retrieval, LLM, and answer flow

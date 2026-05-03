@@ -6,8 +6,10 @@ const {
   dataDir,
   listDataFolders,
   supportedExtensions,
+  supportedFileTypes,
 } = require("../rag/data-loader");
-const { isAdminUser } = require("../rag/config");
+const { canUseAdminCommand, getImageTextConfig } = require("../rag/config");
+const { isImageExtension } = require("../rag/image-text");
 const { refreshKnowledgeVectorStore } = require("../rag/vector-store");
 
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
@@ -20,7 +22,7 @@ module.exports = {
     .addAttachmentOption((option) =>
       option
         .setName("file")
-        .setDescription("A .txt or .pdf knowledge file")
+        .setDescription("A .txt, .pdf, or image knowledge file")
         .setRequired(true),
     )
     .addStringOption((option) =>
@@ -31,7 +33,7 @@ module.exports = {
     ),
 
   async autocomplete(interaction) {
-    if (!isAdminUser(interaction.user.id)) {
+    if (!canUseAdminCommand(interaction)) {
       await interaction.respond([]);
       return;
     }
@@ -50,7 +52,7 @@ module.exports = {
   },
 
   async execute(interaction) {
-    if (!isAdminUser(interaction.user.id)) {
+    if (!canUseAdminCommand(interaction)) {
       await replyNotAllowed(interaction);
       return;
     }
@@ -98,12 +100,30 @@ module.exports = {
 
 function validateAttachment(attachment, extension) {
   if (!supportedExtensions.has(extension)) {
-    throw new Error("Only `.txt` and `.pdf` files are supported.");
+    throw new Error(`Only ${supportedFileTypes} files are supported.`);
   }
 
-  if (attachment.size > MAX_UPLOAD_BYTES) {
-    throw new Error("Upload is too large. Maximum file size is 25 MB.");
+  const maxBytes = getMaxUploadBytes(extension);
+
+  if (attachment.size > maxBytes) {
+    throw new Error(
+      `Upload is too large. Maximum file size is ${formatBytes(maxBytes)}.`,
+    );
   }
+}
+
+function getMaxUploadBytes(extension) {
+  if (!isImageExtension(extension)) return MAX_UPLOAD_BYTES;
+
+  return Math.min(MAX_UPLOAD_BYTES, getImageTextConfig().maxBytes);
+}
+
+function formatBytes(bytes) {
+  const megabytes = bytes / 1024 / 1024;
+
+  if (Number.isInteger(megabytes)) return `${megabytes} MB`;
+
+  return `${megabytes.toFixed(1)} MB`;
 }
 
 function getUploadTarget(filename, folder) {
@@ -203,7 +223,7 @@ function createErrorEmbed(error) {
 
 async function replyNotAllowed(interaction) {
   await interaction.reply({
-    content: "Only users listed in `discord.adminUserIds` can use this command.",
+    content: `Only users listed in \`discord.adminUserIds\` or members with \`discord.moderatorRoleIds\` can use this command. Your user ID is \`${interaction.user.id}\`.`,
     ephemeral: true,
   });
 }
