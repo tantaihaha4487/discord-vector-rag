@@ -79,6 +79,7 @@ function getConfigSnapshot() {
     imageTextProvider: imageText.id,
     imageTextModel: imageText.model,
     imageTextPromptVersion: imageText.promptVersion,
+    qdrantUrl: qdrant.url,
     qdrantCollection: qdrant.collectionName,
     qdrantIndexId: qdrant.indexId,
     retrievalChunkSize: retrieval.chunkSize,
@@ -98,6 +99,7 @@ function getReloadWarnings(before, after) {
   }
 
   if (
+    before.qdrantUrl !== after.qdrantUrl ||
     before.qdrantCollection !== after.qdrantCollection ||
     before.qdrantIndexId !== after.qdrantIndexId
   ) {

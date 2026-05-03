@@ -1,5 +1,5 @@
 const crypto = require("node:crypto");
-const { mkdir, readFile, writeFile } = require("node:fs/promises");
+const { mkdir, readFile, stat, writeFile } = require("node:fs/promises");
 const path = require("node:path");
 const { getImageTextConfig } = require("./config");
 
@@ -22,6 +22,14 @@ const IMAGE_TEXT_PROMPT = [
 
 async function extractImageText(filePath, relativePath) {
   const config = getImageTextConfig();
+  const file = await stat(filePath);
+
+  if (file.size > config.maxBytes) {
+    throw new Error(
+      `Image ${relativePath} is too large for inline extraction. Maximum size is ${config.maxBytes} bytes.`,
+    );
+  }
+
   const image = await readFile(filePath);
   const fileSha256 = createSha256(image);
   const mimeType = getImageMimeType(filePath);
