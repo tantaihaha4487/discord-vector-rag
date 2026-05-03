@@ -6,8 +6,11 @@ const { loadKnowledgeBase } = require("./data-loader");
 const { createEmbeddingModel } = require("./llm");
 
 let vectorStorePromise;
+let refreshPromise;
 
 async function getKnowledgeVectorStore() {
+  if (refreshPromise) return refreshPromise;
+
   if (!vectorStorePromise) {
     const currentPromise = buildKnowledgeVectorStore().catch((error) => {
       if (vectorStorePromise === currentPromise) {
@@ -21,6 +24,40 @@ async function getKnowledgeVectorStore() {
   }
 
   return vectorStorePromise;
+}
+
+async function refreshKnowledgeVectorStore() {
+  const queuedAfter = refreshPromise ?? vectorStorePromise;
+  let activePromise;
+
+  const currentPromise = (async () => {
+    await queuedAfter?.catch(() => undefined);
+
+    const previousPromise = vectorStorePromise;
+
+    try {
+      const knowledgeBase = await buildKnowledgeVectorStore();
+
+      vectorStorePromise = Promise.resolve(knowledgeBase);
+
+      return knowledgeBase;
+    } catch (error) {
+      vectorStorePromise = previousPromise;
+      throw error;
+    }
+  })();
+
+  activePromise = currentPromise.finally(() => {
+    if (refreshPromise === activePromise) {
+      refreshPromise = undefined;
+    }
+  });
+
+  refreshPromise = activePromise;
+
+  const knowledgeBase = await activePromise;
+
+  return getIndexStats(knowledgeBase);
 }
 
 async function buildKnowledgeVectorStore() {
@@ -50,6 +87,8 @@ async function buildKnowledgeVectorStore() {
 
   return {
     chunks,
+    collectionName: qdrant.collectionName,
+    indexId: qdrant.indexId,
     similaritySearch: (query, limit) =>
       similaritySearch(
         client,
@@ -68,6 +107,16 @@ async function buildKnowledgeVectorStore() {
         query,
         limit,
       ),
+  };
+}
+
+function getIndexStats(knowledgeBase) {
+  return {
+    chunks: knowledgeBase.chunks.length,
+    files: new Set(knowledgeBase.chunks.map((chunk) => chunk.metadata.source))
+      .size,
+    collectionName: knowledgeBase.collectionName,
+    indexId: knowledgeBase.indexId,
   };
 }
 
@@ -237,4 +286,4 @@ function createDeterministicUuid(input) {
   ].join("-");
 }
 
-module.exports = { getKnowledgeVectorStore };
+module.exports = { getKnowledgeVectorStore, refreshKnowledgeVectorStore };

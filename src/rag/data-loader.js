@@ -73,6 +73,22 @@ async function listDataFiles(dir, baseDir = dir) {
   return files.flat();
 }
 
+async function listDataFolders(dir = dataDir, baseDir = dir) {
+  const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+  const folders = await Promise.all(
+    entries
+      .filter((entry) => entry.isDirectory())
+      .map(async (entry) => {
+        const folderPath = path.join(dir, entry.name);
+        const relativePath = path.relative(baseDir, folderPath).split(path.sep).join("/");
+
+        return [relativePath, ...(await listDataFolders(folderPath, baseDir))];
+      }),
+  );
+
+  return folders.flat();
+}
+
 async function loadFileText(filePath) {
   if (path.extname(filePath).toLowerCase() !== ".pdf") {
     return readFile(filePath, "utf8");
@@ -89,4 +105,9 @@ async function loadFileText(filePath) {
   }
 }
 
-module.exports = { loadKnowledgeBase };
+module.exports = {
+  dataDir,
+  listDataFolders,
+  loadKnowledgeBase,
+  supportedExtensions,
+};

@@ -24,6 +24,7 @@ services:
 
   bot:
     build: .
+    command: sh -c "npm run deploy && npm start"
     env_file:
       - .env
     environment:
@@ -35,7 +36,7 @@ services:
       OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}
       RAG_DEBUG_RETRIEVAL: ${RAG_DEBUG_RETRIEVAL:-false}
     volumes:
-      - ./data:/app/data:ro
+      - ./data:/app/data
     depends_on:
       qdrant:
         condition: service_started
