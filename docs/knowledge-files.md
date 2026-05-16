@@ -9,7 +9,7 @@ Related pages: [Setup Guide](setup.md), [Configuration Guide](configuration.md),
 ## Supported Types
 
 - `.txt` files are read as UTF-8 text.
-- `.pdf` files are parsed with `pdf-parse`.
+- `.pdf` files are parsed with `pdf-parse` by default.
 - `.png`, `.jpg`, `.jpeg`, `.webp`, `.heic`, and `.heif` files are converted to text by `imageText.provider`.
 
 ## Folder Layout
@@ -34,6 +34,7 @@ Rules:
 - Avoid adding private image data unless your configured image text provider is acceptable for that data.
 - Large PDFs create more chunks and can dominate retrieval results.
 - Image files must be under `imageText.maxBytes`.
+- PDF OCR sends rendered page images to `imageText.provider`; avoid OCR for private scanned PDFs unless that provider is acceptable for the data.
 
 ## Indexing Behavior
 
@@ -44,6 +45,7 @@ During indexing, it:
 - Lists files recursively.
 - Filters unsupported extensions.
 - Extracts text from `.txt`, `.pdf`, and supported image files.
+- Uses OCR instead of normal PDF text extraction for PDFs uploaded with `use_ocr:true`.
 - Splits documents using `retrieval.chunkSize` and `retrieval.chunkOverlap`.
 - Adds metadata including source path, chunk index, and `qdrant.indexId`.
 - Deletes old Qdrant points for the current `qdrant.indexId`.
@@ -61,6 +63,10 @@ Behavior:
 - The optional folder field autocompletes existing folders.
 - A typed folder path can create a new folder under `data/`.
 - Folder paths are normalized and must stay inside `data/`.
+- `use_ocr:true` is accepted only for PDF and image uploads.
+- For PDFs, `use_ocr:true` skips normal `pdf-parse` text extraction and OCRs every page unless `imageText.pdfOcrMaxPages` is configured.
+- For images, text extraction already uses OCR/image text; `use_ocr:true` only makes that explicit.
+- PDF OCR choices are persisted in `data/.rag-metadata.json` so `/reload database`, `/refresh`, and restarts keep the same extraction mode.
 - After saving the file, the bot refreshes the vector index automatically.
 
 ## Viewing Files From Discord
@@ -78,18 +84,19 @@ Behavior:
 - Files within Discord's attachment limit are sent directly.
 - Larger files are uploaded to tmpfiles and returned as a link.
 
-## Image Text Cache
+## Image Text And OCR Cache
 
-Images are converted to text during indexing and cached under `.cache/image-text/` by default.
+Images and OCR PDF pages are converted to text during indexing and cached under `.cache/image-text/` by default.
 
 Cache identity includes:
 
-- Image file hash.
+- Image file hash for normal images.
+- PDF file hash, page number, and render settings for PDF OCR pages.
 - Provider ID.
 - Model name.
 - Prompt version.
 
-Unchanged images reuse cached extracted text. Change `imageText.promptVersion` to force re-extraction.
+PDF OCR cache records also store the rendered page hash for debugging. Unchanged images and PDF pages reuse cached extracted text. Change `imageText.promptVersion` to force re-extraction.
 
 ## Docker Data Behavior
 

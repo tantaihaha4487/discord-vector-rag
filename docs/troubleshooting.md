@@ -147,6 +147,18 @@ Check:
 
 If you changed image extraction settings, run `/reload`, then `/refresh`.
 
+## PDF OCR Fails
+
+Check:
+
+- The PDF was uploaded with `use_ocr:true`.
+- `imageText.provider` points to a provider with an API key.
+- `imageText.model` supports vision/image input.
+- Rendered page images are below `imageText.maxBytes`.
+- If `imageText.pdfOcrMaxPages` is set, the PDF page count is within the limit.
+
+PDF OCR can be slower and more expensive than normal PDF text extraction because every page is rendered and sent to the image text provider. Unset `imageText.pdfOcrMaxPages` means every page is OCRed.
+
 ## Answers Use Old Data
 
 Run `/refresh` after changing files in `data/` outside `/upload`.

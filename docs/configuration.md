@@ -180,11 +180,15 @@ imageText:
   cacheDir: .cache/image-text
   maxBytes: 15728640
   promptVersion: v1
+  # Optional. Omit to OCR every page in PDFs uploaded with use_ocr.
+  # pdfOcrMaxPages: 25
 ```
 
-Image files are sent to the configured provider during indexing. Extracted text is cached by file hash, provider, model, and prompt version.
+Image files are sent to the configured provider during indexing. PDFs uploaded with `use_ocr:true` are rendered page by page and each page image is sent to the same provider. Extracted text is cached by image file hash for images, or PDF file hash/page/render identity for PDF OCR pages, plus provider, model, and prompt version.
 
-Change `promptVersion` when you want to force image text re-extraction after changing extraction behavior.
+`imageText.pdfOcrMaxPages` is optional. When omitted, PDF OCR processes every page. When set, PDFs above the limit fail with a clear error rather than indexing only the first pages.
+
+Change `promptVersion` when you want to force image or PDF OCR text re-extraction after changing extraction behavior.
 
 ## Retrieval
 

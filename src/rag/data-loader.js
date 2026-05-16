@@ -10,6 +10,8 @@ const {
   supportedImageExtensions,
 } = require("./image-text");
 const { normalizeSourcePath } = require("./path-normalizer");
+const { extractPdfTextWithOcr } = require("./pdf-ocr");
+const { getFileMetadata, readUploadMetadata } = require("./upload-metadata");
 
 const dataDir = path.join(__dirname, "..", "..", "data");
 const textExtensions = new Set([".txt", ".pdf"]);
@@ -41,6 +43,7 @@ async function loadKnowledgeBase() {
 
 async function loadDocuments() {
   const files = await listDataFiles(dataDir);
+  const uploadMetadata = await readUploadMetadata();
   const supportedFiles = files.filter(({ relativePath }) =>
     supportedExtensions.has(path.extname(relativePath).toLowerCase()),
   );
@@ -51,7 +54,11 @@ async function loadDocuments() {
 
   return Promise.all(
     supportedFiles.map(async ({ filePath, relativePath }) => {
-      const content = await loadFileContent(filePath, relativePath);
+      const content = await loadFileContent(
+        filePath,
+        relativePath,
+        getFileMetadata(uploadMetadata, relativePath),
+      );
 
       return new Document({
         pageContent: content.text,
@@ -122,11 +129,15 @@ async function loadFileText(filePath) {
   }
 }
 
-async function loadFileContent(filePath, relativePath) {
+async function loadFileContent(filePath, relativePath, fileMetadata = {}) {
   const extension = path.extname(filePath).toLowerCase();
 
   if (isImageExtension(extension)) {
     return extractImageText(filePath, relativePath);
+  }
+
+  if (extension === ".pdf" && fileMetadata.useOcr) {
+    return extractPdfTextWithOcr(filePath, relativePath);
   }
 
   return {

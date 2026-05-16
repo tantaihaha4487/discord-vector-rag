@@ -25,7 +25,7 @@ Public commands:
 
 Admin commands:
 
-- `/upload file:<attachment> folder:<optional>` saves a knowledge file and refreshes the index.
+- `/upload file:<attachment> folder:<optional> use_ocr:<optional>` saves a knowledge file and refreshes the index. Use `use_ocr:true` for scanned PDFs or image uploads.
 - `/view file:<path>` when `commands.view.allowEveryone` is `false`.
 - `/refresh` rebuilds the vector database from `data/`.
 - `/reload` reloads `config.yaml` without restarting the bot.
@@ -59,7 +59,7 @@ Run `/refresh` after changing:
 - `retrieval.chunkSize` or `retrieval.chunkOverlap`.
 - `embeddings.provider` or embedding model.
 - `qdrant.collection` or `qdrant.indexId`.
-- `imageText.provider`, `imageText.model`, or `imageText.promptVersion`.
+- `imageText.provider`, `imageText.model`, `imageText.promptVersion`, or `imageText.pdfOcrMaxPages`.
 
 You do not need `/refresh` after changing chat model fallback order unless you also changed indexing settings.
 
@@ -134,4 +134,4 @@ for file in src/**/*.js; do node --check "$file" || exit 1; done
 - Keep filenames short but descriptive.
 - Periodically remove obsolete knowledge files and run `/refresh`.
 - Keep `.cache/image-text/` if you want to avoid reprocessing unchanged images.
-- Clear `.cache/image-text/` only when you intentionally want image re-extraction.
+- Clear `.cache/image-text/` only when you intentionally want image or PDF OCR re-extraction.

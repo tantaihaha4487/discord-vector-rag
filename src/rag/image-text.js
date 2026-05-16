@@ -1,5 +1,5 @@
 const crypto = require("node:crypto");
-const { mkdir, readFile, stat, writeFile } = require("node:fs/promises");
+const { mkdir, readFile, rename, stat, writeFile } = require("node:fs/promises");
 const path = require("node:path");
 const { getImageTextConfig } = require("./config");
 
@@ -27,22 +27,52 @@ async function extractImageText(filePath, relativePath) {
   assertImageWithinLimit(file.size, config, relativePath);
 
   const image = await readFile(filePath);
-  const fileSha256 = createSha256(image);
   const mimeType = getImageMimeType(filePath);
-  const cacheKey = createCacheKey(config, fileSha256);
-  const cachePath = path.join(config.cacheDir, `${cacheKey}.json`);
-  const cached = await readCachedText(cachePath, config, fileSha256);
+  return extractImageBufferText({
+    image,
+    mimeType,
+    source: relativePath,
+    sourceType: "image",
+    config,
+  });
+}
+
+async function extractImageBufferText({
+  image,
+  mimeType,
+  source,
+  sourceType = "image",
+  cacheIdentity = {},
+  cacheRecord = {},
+  metadata = {},
+  imageHashKey = "fileSha256",
+  config = getImageTextConfig(),
+}) {
+  const imageSha256 = createSha256(image);
+  const imageIdentity = imageHashKey ? { [imageHashKey]: imageSha256 } : {};
+  const identity = {
+    ...cacheIdentity,
+    ...imageIdentity,
+  };
+  const cached = await readImageTextCache(identity, config);
 
   if (cached !== undefined) {
-    return createResult(cached, config, mimeType, cacheKey);
+    return createResult(cached.text, config, mimeType, cached.cacheKey, {
+      sourceType,
+      ...metadata,
+    });
   }
 
-  assertImageWithinLimit(image.byteLength, config, relativePath);
+  assertImageWithinLimit(image.byteLength, config, source);
 
   const text = await requestImageText(config, image, mimeType);
+  const cacheKey = createCacheKey(config, identity);
+  const cachePath = path.join(config.cacheDir, `${cacheKey}.json`);
+
   await writeCache(cachePath, {
-    source: relativePath,
-    fileSha256,
+    source,
+    ...cacheRecord,
+    ...identity,
     mimeType,
     provider: config.id,
     model: config.model,
@@ -51,7 +81,20 @@ async function extractImageText(filePath, relativePath) {
     createdAt: new Date().toISOString(),
   });
 
-  return createResult(text, config, mimeType, cacheKey);
+  return createResult(text, config, mimeType, cacheKey, {
+    sourceType,
+    ...metadata,
+  });
+}
+
+async function readImageTextCache(identity, config = getImageTextConfig()) {
+  const cacheKey = createCacheKey(config, identity);
+  const cachePath = path.join(config.cacheDir, `${cacheKey}.json`);
+  const text = await readCachedText(cachePath, config, identity);
+
+  if (text === undefined) return undefined;
+
+  return { cacheKey, text };
 }
 
 function assertImageWithinLimit(size, config, relativePath) {
@@ -62,7 +105,7 @@ function assertImageWithinLimit(size, config, relativePath) {
   );
 }
 
-function createResult(text, config, mimeType, cacheKey) {
+function createResult(text, config, mimeType, cacheKey, metadata = {}) {
   return {
     text,
     metadata: {
@@ -70,7 +113,7 @@ function createResult(text, config, mimeType, cacheKey) {
       imageTextCacheKey: cacheKey,
       imageTextModel: config.model,
       imageTextProvider: config.id,
-      sourceType: "image",
+      ...metadata,
     },
   };
 }
@@ -155,7 +198,7 @@ function truncate(text, length = 1000) {
   return text.length > length ? `${text.slice(0, length)}...` : text;
 }
 
-async function readCachedText(cachePath, config, fileSha256) {
+async function readCachedText(cachePath, config, identity) {
   let record;
 
   try {
@@ -169,7 +212,7 @@ async function readCachedText(cachePath, config, fileSha256) {
   }
 
   if (
-    record.fileSha256 !== fileSha256 ||
+    !matchesIdentity(record, identity) ||
     record.provider !== config.id ||
     record.model !== config.model ||
     record.promptVersion !== config.promptVersion ||
@@ -182,14 +225,35 @@ async function readCachedText(cachePath, config, fileSha256) {
 }
 
 async function writeCache(cachePath, record) {
-  await mkdir(path.dirname(cachePath), { recursive: true });
-  await writeFile(cachePath, `${JSON.stringify(record, null, 2)}\n`, "utf8");
+  const directory = path.dirname(cachePath);
+  const tempPath = path.join(
+    directory,
+    `.${path.basename(cachePath)}.${process.pid}.${Date.now()}.${crypto.randomUUID()}.tmp`,
+  );
+
+  await mkdir(directory, { recursive: true });
+  await writeFile(tempPath, `${JSON.stringify(record, null, 2)}\n`, "utf8");
+  await rename(tempPath, cachePath);
 }
 
-function createCacheKey(config, fileSha256) {
+function matchesIdentity(record, identity) {
+  return Object.entries(identity).every(([key, value]) =>
+    isSameCacheValue(record[key], value),
+  );
+}
+
+function isSameCacheValue(left, right) {
+  if (isPlainObject(left) || isPlainObject(right)) {
+    return JSON.stringify(left) === JSON.stringify(right);
+  }
+
+  return left === right;
+}
+
+function createCacheKey(config, identity) {
   return createSha256(
     JSON.stringify({
-      fileSha256,
+      ...identity,
       provider: config.id,
       model: config.model,
       promptVersion: config.promptVersion,
@@ -199,6 +263,10 @@ function createCacheKey(config, fileSha256) {
 
 function createSha256(input) {
   return crypto.createHash("sha256").update(input).digest("hex");
+}
+
+function isPlainObject(value) {
+  return Object.prototype.toString.call(value) === "[object Object]";
 }
 
 function isImageExtension(extension) {
@@ -216,8 +284,11 @@ function getImageMimeType(filePath) {
 }
 
 module.exports = {
+  createSha256,
+  extractImageBufferText,
   extractImageText,
   getImageMimeType,
   isImageExtension,
+  readImageTextCache,
   supportedImageExtensions,
 };

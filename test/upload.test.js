@@ -43,3 +43,16 @@ test("normalizeFolder rejects traversal after data prefix removal", () => {
     /relative path under `data\/`/,
   );
 });
+
+test("validateOcrOption accepts PDF and image uploads", () => {
+  assert.doesNotThrow(() => _test.validateOcrOption(".pdf", true));
+  assert.doesNotThrow(() => _test.validateOcrOption(".png", true));
+  assert.doesNotThrow(() => _test.validateOcrOption(".txt", false));
+});
+
+test("validateOcrOption rejects OCR for text uploads", () => {
+  assert.throws(
+    () => _test.validateOcrOption(".txt", true),
+    /OCR extraction is only available for PDF and image uploads/,
+  );
+});

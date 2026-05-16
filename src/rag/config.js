@@ -248,6 +248,11 @@ function getImageTextConfig() {
     promptVersion:
       getString(imageText.promptVersion, "imageText.promptVersion") ??
       DEFAULT_IMAGE_TEXT_PROMPT_VERSION,
+    pdfOcrMaxPages: getOptionalInteger(
+      imageText.pdfOcrMaxPages,
+      "imageText.pdfOcrMaxPages",
+      { min: 1 },
+    ),
   };
 }
 
@@ -532,6 +537,12 @@ function getInteger(value, fallback, configPath, { min }) {
   }
 
   return number;
+}
+
+function getOptionalInteger(value, configPath, options) {
+  if (value === undefined || value === null || value === "") return undefined;
+
+  return getInteger(value, undefined, configPath, options);
 }
 
 function getBoolean(value, fallback, configPath) {

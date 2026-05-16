@@ -163,6 +163,7 @@ function getConfigSnapshot() {
     imageTextProvider: imageText.id,
     imageTextModel: imageText.model,
     imageTextPromptVersion: imageText.promptVersion,
+    imageTextPdfOcrMaxPages: imageText.pdfOcrMaxPages,
     qdrantUrl: qdrant.url,
     qdrantCollection: qdrant.collectionName,
     qdrantIndexId: qdrant.indexId,
@@ -200,7 +201,8 @@ function getReloadWarnings(before, after) {
   if (
     before.imageTextProvider !== after.imageTextProvider ||
     before.imageTextModel !== after.imageTextModel ||
-    before.imageTextPromptVersion !== after.imageTextPromptVersion
+    before.imageTextPromptVersion !== after.imageTextPromptVersion ||
+    before.imageTextPdfOcrMaxPages !== after.imageTextPdfOcrMaxPages
   ) {
     warnings.push("Image text settings changed. Run `/reload database` to reprocess image knowledge files.");
   }
