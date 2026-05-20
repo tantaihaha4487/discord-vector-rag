@@ -11,6 +11,7 @@ const {
 const { canUseAdminCommand, getImageTextConfig } = require("../rag/config");
 const { isImageExtension } = require("../rag/image-text");
 const { normalizePathSegment } = require("../rag/path-normalizer");
+const { setFileOcrPreference } = require("../rag/upload-metadata");
 const { refreshKnowledgeVectorStore } = require("../rag/vector-store");
 
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
@@ -31,6 +32,11 @@ const uploadCommand = {
         .setName("folder")
         .setDescription("Existing or new folder under data/")
         .setAutocomplete(true),
+    )
+    .addBooleanOption((option) =>
+      option
+        .setName("use_ocr")
+        .setDescription("Use OCR/image text extraction for PDF or image uploads"),
     ),
 
   async autocomplete(interaction) {
@@ -64,24 +70,21 @@ const uploadCommand = {
 
     const attachment = interaction.options.getAttachment("file", true);
     const folder = interaction.options.getString("folder") ?? "";
+    const useOcr = interaction.options.getBoolean("use_ocr") ?? false;
 
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     try {
       const target = getUploadTarget(attachment.name, folder);
-      validateAttachment(attachment, target.extension);
+      validateAttachment(attachment, target.extension, useOcr);
 
       await interaction.editReply({
-        embeds: [
-          createEmbed(
-            "Upload Received",
-            `Saving \`${target.relativePath}\` and refreshing the vector database...`,
-          ),
-        ],
+        embeds: [createUploadReceivedEmbed(target, useOcr)],
       });
 
       await saveAttachment(attachment.url, target.filePath, target.directoryPath);
-      await refreshAfterUpload(interaction, target.relativePath);
+      await updateOcrPreference(target, useOcr);
+      await refreshAfterUpload(interaction, target, useOcr);
     } catch (error) {
       console.error("Error uploading knowledge file:", error);
 
@@ -91,12 +94,14 @@ const uploadCommand = {
 };
 
 module.exports = uploadCommand;
-module.exports._test = { getUploadTarget, normalizeFolder };
+module.exports._test = { getUploadTarget, normalizeFolder, validateOcrOption };
 
-function validateAttachment(attachment, extension) {
+function validateAttachment(attachment, extension, useOcr) {
   if (!supportedExtensions.has(extension)) {
     throw new Error(`Only ${supportedFileTypes} files are supported.`);
   }
+
+  validateOcrOption(extension, useOcr);
 
   const maxBytes = getMaxUploadBytes(extension);
 
@@ -105,6 +110,13 @@ function validateAttachment(attachment, extension) {
       `Upload is too large. Maximum file size is ${formatBytes(maxBytes)}.`,
     );
   }
+}
+
+function validateOcrOption(extension, useOcr) {
+  if (!useOcr) return;
+  if (extension === ".pdf" || isImageExtension(extension)) return;
+
+  throw new Error("OCR extraction is only available for PDF and image uploads.");
 }
 
 function getMaxUploadBytes(extension) {
@@ -199,38 +211,72 @@ async function saveAttachment(url, filePath, directoryPath) {
   await writeFile(filePath, Buffer.from(await response.arrayBuffer()));
 }
 
-async function refreshAfterUpload(interaction, relativePath) {
+async function updateOcrPreference(target, useOcr) {
+  if (target.extension !== ".pdf") return;
+
+  await setFileOcrPreference(target.relativePath, useOcr);
+}
+
+async function refreshAfterUpload(interaction, target, useOcr) {
   try {
     const stats = await refreshKnowledgeVectorStore();
 
     await interaction.editReply({
-      embeds: [createSuccessEmbed(relativePath, stats)],
+      embeds: [createSuccessEmbed(target, stats, useOcr)],
     });
   } catch (error) {
     console.error("Error refreshing RAG index after upload:", error);
 
     await interaction.editReply({
-      embeds: [createRefreshFailedEmbed(relativePath, error)],
+      embeds: [createRefreshFailedEmbed(target, error)],
     });
   }
 }
 
-function createSuccessEmbed(relativePath, stats) {
-  return createEmbed(
+function createUploadReceivedEmbed(target, useOcr) {
+  const embed = createEmbed(
+    "Upload Received",
+    `Saving \`${target.relativePath}\` and refreshing the vector database...`,
+  );
+  const extraction = getExtractionLabel(target.extension, useOcr);
+
+  if (extraction) {
+    embed.addFields({ name: "Extraction", value: extraction, inline: false });
+  }
+
+  return embed;
+}
+
+function createSuccessEmbed(target, stats, useOcr) {
+  const embed = createEmbed(
     "Upload Complete",
-    `Saved \`${relativePath}\` and refreshed the knowledge base.`,
-  ).addFields(
+    `Saved \`${target.relativePath}\` and refreshed the knowledge base.`,
+  );
+  const extraction = getExtractionLabel(target.extension, useOcr);
+
+  if (extraction) {
+    embed.addFields({ name: "Extraction", value: extraction, inline: false });
+  }
+
+  return embed.addFields(
     { name: "Files", value: String(stats.files), inline: true },
     { name: "Chunks", value: String(stats.chunks), inline: true },
     { name: "Collection", value: `\`${stats.collectionName}\``, inline: false },
   );
 }
 
-function createRefreshFailedEmbed(relativePath, error) {
+function createRefreshFailedEmbed(target, error) {
   return createEmbed(
     "Upload Saved, Refresh Failed",
-    `Saved \`${relativePath}\`, but the vector database refresh failed.`,
+    `Saved \`${target.relativePath}\`, but the vector database refresh failed.`,
   ).addFields({ name: "Error", value: getUserFacingError(error) });
+}
+
+function getExtractionLabel(extension, useOcr) {
+  if (extension === ".pdf" && useOcr) return "PDF OCR using image text extraction";
+  if (isImageExtension(extension)) return "Image text extraction";
+
+  return undefined;
 }
 
 function createErrorEmbed(error) {

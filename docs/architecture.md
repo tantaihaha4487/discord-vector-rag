@@ -64,6 +64,7 @@ Text extraction paths:
 - `.txt` uses UTF-8 file reads.
 - `.pdf` uses `pdf-parse`.
 - Images use `src/rag/image-text.js` and the configured image text provider.
+- PDFs uploaded with `use_ocr:true` skip `pdf-parse`, render every page with `pdf-parse` screenshots, and send each rendered page through `src/rag/image-text.js`.
 
 Documents are split into chunks using `RecursiveCharacterTextSplitter` with `retrieval.chunkSize` and `retrieval.chunkOverlap`.
 

@@ -76,6 +76,8 @@ imageText:
   cacheDir: .cache/image-text
   maxBytes: 15728640
   promptVersion: v1
+  # Optional. Omit to OCR every page in PDFs uploaded with use_ocr.
+  # pdfOcrMaxPages: 25
 
 retrieval:
   debug: false

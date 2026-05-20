@@ -20,9 +20,9 @@ Detailed guides live in [`docs/`](docs/README.md):
 - Mention asks are queued per user, with an ephemeral status button so only the requester can view queue/progress details.
 - Slash commands: `/ping`, `/upload`, `/view`, `/refresh`, and `/reload`.
 - Recursive `data/` knowledge loading for `.txt`, `.pdf`, `.png`, `.jpg`, `.jpeg`, `.webp`, `.heic`, and `.heif`.
-- `/upload` can save supported Discord attachments into `data/` and refresh the index automatically.
+- `/upload` can save supported Discord attachments into `data/`, optionally OCR PDFs with `use_ocr`, and refresh the index automatically.
 - `/view` can send knowledge files back to Discord; public access is configurable.
-- Image text extraction with cache reuse for unchanged images.
+- Image text extraction with cache reuse for unchanged images and OCR PDF pages.
 - Hybrid retrieval: keyword-first for exact matches and Qdrant semantic search for general questions.
 - Local Ollama embeddings by default, with optional remote embeddings.
 - Configurable OpenAI-compatible chat provider fallback order.
@@ -145,7 +145,7 @@ Public by default:
 
 Restricted to `DISCORD_ADMIN_USER_IDS` or `DISCORD_MODERATOR_ROLE_IDS`:
 
-- `/upload`: save a knowledge file and refresh the index.
+- `/upload`: save a knowledge file and refresh the index. Use `use_ocr:true` for scanned PDFs.
 - `/refresh`: rebuild the vector database from `data/`.
 - `/reload`: reload `config.yaml` without restarting.
 - `/view` when `commands.view.allowEveryone: false`.
@@ -154,7 +154,7 @@ Restricted to `DISCORD_ADMIN_USER_IDS` or `DISCORD_MODERATOR_ROLE_IDS`:
 
 ```text
 data/                      Knowledge files scanned recursively
-.cache/image-text/         Cached text extracted from images
+.cache/image-text/         Cached text extracted from images and PDF OCR pages
 config.yaml                Non-secret app, command, provider, and retrieval config
 .env                       Local secrets and Discord IDs, not committed
 src/commands/              Slash commands

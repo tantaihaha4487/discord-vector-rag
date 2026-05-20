@@ -92,7 +92,7 @@ data/
     event.jpg
 ```
 
-Supported types are `.txt`, `.pdf`, `.png`, `.jpg`, `.jpeg`, `.webp`, `.heic`, and `.heif`.
+Supported types are `.txt`, `.pdf`, `.png`, `.jpg`, `.jpeg`, `.webp`, `.heic`, and `.heif`. Use `/upload ... use_ocr:true` for scanned PDFs.
 
 More detail: [Knowledge Files](knowledge-files.md).
 
